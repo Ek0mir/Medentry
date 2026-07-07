@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MİRFİX Operasyon Paneli</title>
+<style>
+/* ============ MİRFİX token system (kanon mermaid stillerinden) ============ */
+:root{
+  --brand:#E87722;          /* MİRFİX turuncu */
+  --brand-soft:#FDEBD9;
+  --ink:#2E2B28;            /* sıcak antrasit */
+  --ink-2:#5B564E;
+  --paper:#F3EFE7;          /* kraft torba zemini */
+  --card:#FFFFFF;
+  --line:#E3DCCF;
+  --ok:#2E7D4F; --ok-bg:#E6F2EB;
+  --warn:#B47A14; --warn-bg:#FBF1DC;
+  --bad:#B23A2C; --bad-bg:#F9E7E4;
+  --stale:#8A8578; --stale-bg:#EEEBE4;  /* gri = bayat veri, kırmızıdan kötü */
+  --mono:ui-monospace,"Cascadia Mono","JetBrains Mono",Consolas,monospace;
+  --sans:"Segoe UI",system-ui,-apple-system,"Inter",Roboto,sans-serif;
+  --r:10px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:var(--sans);background:var(--paper);color:var(--ink);
+     display:grid;grid-template-columns:216px 1fr;grid-template-rows:auto 1fr;
+     grid-template-areas:"head head" "nav main";min-height:100vh}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ============ header: form antet düzeni (LOGO | unvan | belge kodu) ======= */
+header{grid-area:head;background:var(--card);border-bottom:3px solid var(--brand);
+  display:flex;align-items:stretch;gap:0}
+.logo{display:flex;align-items:center;gap:10px;padding:12px 18px;
+  border-right:1px dashed var(--line)}
+.logo .mark{width:34px;height:34px;background:var(--brand);color:#fff;font-weight:800;
+  display:grid;place-items:center;border-radius:6px;font-size:15px;letter-spacing:.5px}
+.logo b{font-size:15px;letter-spacing:.04em}
+.logo small{display:block;color:var(--ink-2);font-size:10.5px}
+.head-mid{flex:1;display:flex;align-items:center;padding:0 18px;gap:14px;flex-wrap:wrap}
+.crumb{font-size:12px;color:var(--ink-2);text-transform:uppercase;letter-spacing:.14em}
+.crumb b{color:var(--ink)}
+.head-doc{padding:10px 18px;border-left:1px dashed var(--line);font-family:var(--mono);
+  font-size:11px;color:var(--ink-2);text-align:right;display:flex;flex-direction:column;justify-content:center}
+.head-doc b{color:var(--ink)}
+#freshness{display:inline-flex;align-items:center;gap:6px;font-size:12px;
+  padding:4px 10px;border-radius:99px;background:var(--stale-bg);color:var(--stale)}
+#freshness.live{background:var(--ok-bg);color:var(--ok)}
+#freshness .dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+
+/* ============ sol ray ============ */
+nav{grid-area:nav;background:var(--ink);padding:14px 0;display:flex;flex-direction:column;gap:2px}
+nav a{color:#CFC8BC;text-decoration:none;padding:11px 18px;font-size:13.5px;
+  display:flex;gap:10px;align-items:center;border-left:4px solid transparent}
+nav a .k{font-family:var(--mono);font-size:10px;color:#8F887B;width:26px}
+nav a:hover{background:#3A3630;color:#fff}
+nav a.active{background:#3A3630;color:#fff;border-left-color:var(--brand)}
+nav a:focus-visible{outline:2px solid var(--brand);outline-offset:-2px}
+nav .foot{margin-top:auto;padding:12px 18px;font-family:var(--mono);font-size:10px;color:#7C766A;line-height:1.6}
+
+main{grid-area:main;padding:22px;overflow:auto}
+section{display:none;max-width:1280px;margin:0 auto}
+section.active{display:block}
+h2{font-size:17px;margin:2px 0 4px;letter-spacing:.01em}
+.sub{color:var(--ink-2);font-size:12.5px;margin:0 0 16px}
+
+/* ============ kartlar: her sayının kaynağı var ============ */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(238px,1fr));gap:12px;margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  padding:13px 15px;position:relative;overflow:hidden}
+.card .eyebrow{font-size:10px;text-transform:uppercase;letter-spacing:.16em;color:var(--ink-2)}
+.card .val{font-family:var(--mono);font-size:24px;font-weight:700;margin:5px 0 2px;
+  font-variant-numeric:tabular-nums;line-height:1.1}
+.card .val small{font-size:13px;font-weight:500;color:var(--ink-2)}
+.card .src{font-size:10.5px;color:var(--stale);border-top:1px dashed var(--line);
+  margin-top:8px;padding-top:6px}
+.card .src::before{content:"kaynak · ";color:var(--brand);font-weight:600}
+.card.ok{border-top:3px solid var(--ok)} .card.warn{border-top:3px solid var(--warn)}
+.card.bad{border-top:3px solid var(--bad)} .card.neutral{border-top:3px solid var(--brand)}
+.card.stale-card{border-top:3px solid var(--stale)}
+.delta{font-size:11.5px;color:var(--ink-2)}
+.delta.bad{color:var(--bad)} .delta.ok{color:var(--ok)}
+
+/* ============ paneller / tablolar / çizgeler ============ */
+.grid2{display:grid;grid-template-columns:1.35fr 1fr;gap:14px;align-items:start}
+@media(max-width:980px){.grid2{grid-template-columns:1fr}}
+.box{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;margin-bottom:14px}
+.box h3{margin:0 0 4px;font-size:13.5px;letter-spacing:.02em}
+.box .hint{font-size:11px;color:var(--ink-2);margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:var(--ink-2);
+  text-align:left;padding:6px 8px;border-bottom:2px solid var(--line)}
+td{padding:6px 8px;border-bottom:1px solid var(--paper);vertical-align:top}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+tr:hover td{background:var(--brand-soft)}
+.chip{display:inline-block;padding:2px 9px;border-radius:99px;font-size:10.5px;font-weight:600}
+.chip.ok{background:var(--ok-bg);color:var(--ok)} .chip.bad{background:var(--bad-bg);color:var(--bad)}
+.chip.warn{background:var(--warn-bg);color:var(--warn)} .chip.stale{background:var(--stale-bg);color:var(--stale)}
+.chip.g0{background:var(--stale-bg);color:var(--stale)} .chip.g1{background:var(--warn-bg);color:var(--warn)}
+.chip.g2{background:var(--brand-soft);color:var(--brand)} .chip.g3{background:var(--ok-bg);color:var(--ok)}
+svg text{font-family:var(--mono);font-size:10px;fill:var(--ink-2)}
+.legend{display:flex;gap:14px;font-size:11px;color:var(--ink-2);margin-top:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+.rule{border:1px solid var(--line);border-left:5px solid var(--stale);border-radius:8px;
+  background:var(--card);padding:12px 14px;margin-bottom:10px}
+.rule.ihlal{border-left-color:var(--bad)} .rule.uygun{border-left-color:var(--ok)}
+.rule h4{margin:0;font-size:13px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rule .no{font-family:var(--mono);background:var(--ink);color:#fff;border-radius:5px;
+  padding:1px 7px;font-size:11px}
+.rule p{margin:6px 0 0;font-size:12.5px;color:var(--ink-2);line-height:1.5}
+.rule .src{font-size:10.5px;color:var(--stale);margin-top:5px}
+
+.progress{height:10px;background:var(--paper);border-radius:99px;overflow:hidden;margin:8px 0 4px}
+.progress i{display:block;height:100%;background:var(--brand);border-radius:99px;min-width:2px}
+
+.toolbar{display:flex;gap:8px;margin:0 0 12px;flex-wrap:wrap;align-items:center}
+button,select,input[type=text]{font:inherit;font-size:12.5px;border:1px solid var(--line);
+  border-radius:7px;padding:7px 12px;background:var(--card);color:var(--ink)}
+button.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600;cursor:pointer}
+button.primary:hover{filter:brightness(.95)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+.msg{font-size:12px;font-family:var(--mono);color:var(--ink-2)}
+.empty{padding:26px;text-align:center;color:var(--stale);font-size:13px}
+footer.formfoot{max-width:1280px;margin:8px auto 0;font-family:var(--mono);font-size:10.5px;
+  color:var(--stale);border-top:1px solid var(--line);padding-top:8px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap}
+
+/* ============ canlı sipariş bildirimleri (toast) ============ */
+#toasts{position:fixed;right:16px;bottom:16px;display:flex;flex-direction:column;
+  gap:8px;z-index:99;max-width:340px}
+.toast{background:var(--ink);color:#fff;border-left:4px solid var(--brand);
+  border-radius:8px;padding:10px 14px;font-size:12.5px;box-shadow:0 6px 18px rgba(0,0,0,.25);
+  animation:slidein .25s ease}
+.toast b{color:var(--brand-soft)}
+@keyframes slidein{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+.oneri{border:1px solid var(--line);border-left:4px solid var(--brand);border-radius:8px;
+  padding:10px 12px;margin-bottom:8px;background:var(--card)}
+.oneri .meta{font-size:11px;color:var(--ink-2);font-family:var(--mono)}
+.oneri p{margin:6px 0;font-size:12.5px;white-space:pre-wrap}
+
+@media(max-width:760px){
+  body{grid-template-columns:1fr;grid-template-areas:"head" "nav" "main"}
+  nav{flex-direction:row;overflow-x:auto;padding:0}
+  nav a{border-left:none;border-bottom:4px solid transparent;white-space:nowrap}
+  nav a.active{border-bottom-color:var(--brand)}
+  nav .foot{display:none}
+  .head-doc{display:none}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="mark">M</div>
+    <div><b>MİRFİX</b> <small>ALMİR İNŞAAT — Yapı Kimyasalları</small></div>
+  </div>
+  <div class="head-mid">
+    <span class="crumb">Operasyon Paneli · <b id="crumb-panel">Genel Bakış</b></span>
+    <span id="freshness"><span class="dot"></span><span id="freshness-text">veri bekleniyor</span></span>
+  </div>
+  <div class="head-doc">
+    <span>Belge Kodu <b>MRF-PNL-01</b></span>
+    <span>Sürüm <b>v2.0</b> · <span id="doc-date"></span></span>
+  </div>
+</header>
+
+<nav id="nav">
+  <a href="#genel" class="active"><span class="k">01</span>Genel Bakış</a>
+  <a href="#siparis"><span class="k">02</span>Canlı Siparişler</a>
+  <a href="#kasa"><span class="k">03</span>Kasa &amp; Nakit</a>
+  <a href="#uyum"><span class="k">04</span>Eylem Planı Uyumu</a>
+  <a href="#eski"><span class="k">05</span>Eski Kasa &amp; Tahsilat</a>
+  <a href="#wa"><span class="k">06</span>WhatsApp Sinyalleri</a>
+  <a href="#caristok"><span class="k">07</span>Cari &amp; Stok</a>
+  <a href="#urun"><span class="k">08</span>Ürünler &amp; KPI</a>
+  <a href="#veri"><span class="k">09</span>Veri &amp; Sistem</a>
+  <div class="foot">MRF-PNL-01 v2.0<br>SSOT: Obsidian vault + defter<br>Bu panel türetilmiş okuma modelidir.</div>
+</nav>
+
+<main>
+  <section id="genel" class="active">
+    <h2>Genel Bakış</h2>
+    <p class="sub">Kanon kuralı ekranda: kaynaksız sayı yok — her kartın altında verinin geldiği yer yazar.</p>
+    <div class="cards" id="genel-cards"></div>
+    <div class="grid2">
+      <div class="box"><h3>Aylık Nakit Akışı (devir hariç)</h3>
+        <div class="hint">Kasa hareket dökümü · Ocak–Haziran 2026 (Haziran 3 günlük)</div>
+        <div id="chart-monthly"></div>
+        <div class="legend"><span><i style="background:var(--ok)"></i>Giriş</span>
+          <span><i style="background:var(--bad)"></i>Çıkış</span>
+          <span><i style="background:var(--ink)"></i>Net</span></div>
+      </div>
+      <div class="box"><h3>Kırmızı Alarmlar</h3>
+        <div class="hint">K10 protokolü 07:32 adımı — önce bunlara bakılır</div>
+        <div id="alerts"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="siparis">
+    <h2>Canlı Siparişler</h2>
+    <p class="sub">WhatsApp ajanından düşen sipariş önerileri + hızlı manuel giriş · AI önerir, insan onaylar · kayıtlar deftere işlenir, eğitimde kaybolmaz</p>
+    <div class="cards" id="sip-cards"></div>
+    <div class="grid2">
+      <div>
+        <div class="box"><h3>Bekleyen WhatsApp Önerileri <span class="chip stale" id="sse-chip">canlı bağlantı: bekleniyor</span></h3>
+          <div class="hint">Canlı mesajlardan çıkan sipariş sinyalleri — <b>Onayla</b> formu doldurur, siz kaydedersiniz</div>
+          <div id="oneriler"></div>
+        </div>
+        <div class="box"><h3>Sipariş Defteri</h3>
+          <div class="toolbar">
+            <select id="ord-status">
+              <option value="">Tümü</option><option value="yeni" selected>Yeni</option>
+              <option value="hazirlaniyor">Hazırlanıyor</option><option value="sevk">Sevk</option>
+              <option value="kapandi">Kapandı</option><option value="iptal">İptal</option>
+            </select>
+            <button class="primary" id="ord-load">Listele</button>
+          </div>
+          <div id="orders"></div>
+        </div>
+      </div>
+      <div class="box"><h3>Hızlı Sipariş Girişi</h3>
+        <div class="hint">Zorunlu alan yok — bilineni yazın, bilinmeyen boş kalır (uydurma yasak)</div>
+        <div style="display:grid;gap:8px">
+          <input type="text" id="of-musteri" placeholder="Müşteri / cari unvanı">
+          <input type="text" id="of-urunler" placeholder="Ürünler (örn: 2 palet hazır sıva, 40 torba derz)">
+          <div style="display:flex;gap:8px">
+            <input type="text" id="of-palet" placeholder="Palet" style="flex:1">
+            <input type="text" id="of-torba" placeholder="Torba" style="flex:1">
+            <input type="text" id="of-tutar" placeholder="Tutar ₺" style="flex:1">
+          </div>
+          <input type="text" id="of-not" placeholder="Not (teslimat, vade...)">
+          <input type="hidden" id="of-wauid" value="">
+          <div class="toolbar" style="margin:0">
+            <button class="primary" id="of-save">✔ Siparişi Kaydet</button>
+            <button id="of-clear">Temizle</button>
+            <span class="msg" id="of-msg"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="kasa">
+    <h2>Kasa &amp; Nakit</h2>
+    <p class="sub">2.893 hareket · 01.01.2026 – 03.06.2026 · Ana Kasa + Nakit Kasa</p>
+    <div class="grid2">
+      <div>
+        <div class="box"><h3>Gider Kategorileri</h3><div id="chart-cat"></div></div>
+        <div class="box"><h3>Hareket Ara</h3>
+          <div class="toolbar">
+            <input type="text" id="cash-q" placeholder="açıklama / cari ara…">
+            <select id="cash-cat"><option value="">Tüm kategoriler</option></select>
+            <button class="primary" id="cash-search">Ara</button>
+          </div>
+          <div id="cash-entries"></div>
+        </div>
+      </div>
+      <div>
+        <div class="box"><h3>En Büyük 15 Çıkış (Ödeme)</h3><div id="top-out"></div></div>
+        <div class="box"><h3>En Büyük 15 Giriş (Tahsilat)</h3><div id="top-in"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="uyum">
+    <h2>Finansal Disiplin Eylem Planı — Uyum</h2>
+    <p class="sub">06.07.2026 genelgesindeki 7 tavizsiz kural, kasa verisinden hesaplanır. Kanıtı veride olmayan kural "veri-yok" der — tahmin etmez.</p>
+    <div id="rules"></div>
+  </section>
+
+  <section id="eski">
+    <h2>Eski Kasa Kurtarma (SRC-10) &amp; Tahsilat Defteri</h2>
+    <p class="sub">972 pozitif cari · ALMİR'in öz alacağı (KRR-2026-002) · OKR-O1/KR1 hedefi: Ç3'te ≥ 12M ₺ · görüşme sonuçları buradan girilir</p>
+    <div class="cards" id="eski-cards"></div>
+    <div class="grid2">
+      <div class="box"><h3>Tahsilat Kaydı (görüşme sonucu)</h3>
+        <div class="hint">söz = ödeme sözü alındı · tahsil = para geldi · mahsup = karşı borçla netleşti — OKR çubuğu bu kayıtlarla dolar</div>
+        <div style="display:grid;gap:8px">
+          <input type="text" id="tf-cari" placeholder="Cari unvanı">
+          <div style="display:flex;gap:8px">
+            <select id="tf-tur" style="flex:1"><option value="soz">Söz</option>
+              <option value="tahsil" selected>Tahsil</option><option value="mahsup">Mahsup</option></select>
+            <input type="text" id="tf-tutar" placeholder="Tutar ₺" style="flex:1">
+            <input type="text" id="tf-vade" placeholder="Vade (söz için)" style="flex:1">
+          </div>
+          <input type="text" id="tf-not" placeholder="Not">
+          <div class="toolbar" style="margin:0">
+            <button class="primary" id="tf-save">✔ Kaydet</button>
+            <span class="msg" id="tf-msg"></span>
+          </div>
+        </div>
+        <div style="margin-top:10px" id="tahsilat-list"></div>
+      </div>
+      <div class="box"><h3>Görüşme Kuyruğu</h3>
+        <div class="toolbar">
+          <select id="eski-class">
+            <option value="">Tüm sınıflar</option>
+            <option value="A" selected>A — Aktif, ≥250K</option>
+            <option value="B">B — Aktif, orta</option><option value="B2">B2 — Aktif, küçük</option>
+            <option value="C">C — Pasif, çok büyük</option><option value="C2">C2 — Pasif, büyük</option>
+            <option value="D">D — Pasif, orta</option><option value="E">E — Küçük</option>
+            <option value="X">X — İflas</option><option value="G">G — İlişkili taraf</option>
+          </select>
+          <button class="primary" id="eski-load">Listele</button>
+        </div>
+        <div id="eski-list"></div>
+      </div>
+      <div>
+        <div class="box"><h3>Sınıf Dağılımı</h3><div id="chart-class"></div></div>
+        <div class="box"><h3>Mahsup Fırsatları (Biz Borçluyuz)</h3>
+          <div class="hint">Aktif carilerde karşı alacakla netleştirme görüşülebilir</div>
+          <div id="mahsup"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="wa">
+    <h2>WhatsApp Sinyalleri</h2>
+    <p class="sub">3 grup arşivinden çıkarılmış tipli sinyaller · guven 0-3 (kanon standardı) · tutar belirsizse boş bırakılır, uydurulmaz</p>
+    <div class="cards" id="wa-cards"></div>
+    <div class="grid2">
+      <div class="box"><h3>Sinyal Akışı</h3>
+        <div class="toolbar">
+          <select id="sig-type">
+            <option value="order">Sipariş</option><option value="payment">Ödeme</option>
+            <option value="cheque">Çek</option><option value="icmal_photo">İcmal Fotoğrafı</option>
+            <option value="production">Üretim</option>
+          </select>
+          <button class="primary" id="sig-load">Getir</button>
+        </div>
+        <div id="signals"></div>
+      </div>
+      <div class="box"><h3>Aylık Mesaj Hacmi (grup bazlı)</h3><div id="chart-wa"></div><div class="legend" id="wa-legend"></div></div>
+    </div>
+  </section>
+
+  <section id="caristok">
+    <h2>Cari &amp; Stok</h2>
+    <p class="sub">Muhasebe programından alınan cari bakiye ve stok listeleri — adında "cari" / "stok" geçen xlsx dosyasını <code>data/raw/</code> ya da vault <code>MIRFIX/Gelen/</code> içine bırakın</p>
+    <div class="cards" id="cs-cards"></div>
+    <div class="grid2">
+      <div class="box"><h3>Cari Bakiyeler</h3>
+        <div class="toolbar">
+          <input type="text" id="cari-q" placeholder="unvan ara…">
+          <button class="primary" id="cari-search">Ara</button>
+        </div>
+        <div id="cari-list"></div>
+      </div>
+      <div class="box"><h3>Stok Listesi</h3>
+        <div class="toolbar">
+          <input type="text" id="stok-q" placeholder="ürün ara…">
+          <button class="primary" id="stok-search">Ara</button>
+        </div>
+        <div id="stok-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="urun">
+    <h2>Ürünler &amp; KPI Sözlüğü</h2>
+    <p class="sub">FYT v1 katalogu (30+ SKU) ve BOS §5.2 çekirdek KPI tanımları — değerler veri aktıkça dolacak</p>
+    <div class="grid2">
+      <div class="box"><h3>Fiyat Listesi</h3><div id="products"></div></div>
+      <div>
+        <div class="box bad" id="gaps-box"><h3>Yayın Engelleri</h3><div id="gaps"></div></div>
+        <div class="box"><h3>KPI Tanımları (hedef / kırmızı eşik)</h3><div id="kpis"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="veri">
+    <h2>Veri &amp; Sistem</h2>
+    <p class="sub">Kendini eğitme döngüsü: yeni dosyaları <code>data/raw/</code> ya da vault <code>MIRFIX/Gelen/</code> içine bırakın → panel dosya değişimini kendisi görür (60 sn) ya da "Yeniden Eğit"e basın. Veritabanı sıfırdan yeniden kurulabilir; sipariş/tahsilat kayıtları defterde (events.jsonl) saklanır, kaybolmaz.</p>
+    <div class="toolbar">
+      <button class="primary" id="retrain">⟳ Yeniden Eğit (tüm kaynakları oku)</button>
+      <span class="msg" id="retrain-msg"></span>
+    </div>
+    <div class="grid2">
+      <div>
+        <div class="box"><h3>Obsidian Vault</h3>
+          <div class="hint">Vault bağlanınca: <code>MIRFIX/Gelen</code> ek kaynak kutusu olur, <code>MIRFIX/Defter</code> sipariş/tahsilat defterini taşır, <code>MIRFIX/Panel</code> içine markdown raporlar yazılır.</div>
+          <div class="toolbar">
+            <input type="text" id="vault-path" placeholder="Vault klasör yolu (örn: C:\Users\...\ObsidianVault)" style="flex:1;min-width:240px">
+            <button class="primary" id="vault-save">Bağla</button>
+            <button id="vault-write">Raporları Şimdi Yaz</button>
+            <span class="msg" id="vault-msg"></span>
+          </div>
+          <div id="vault-status"></div>
+        </div>
+        <div class="box"><h3>Eğitim Turları</h3><div id="ingests"></div></div>
+      </div>
+      <div>
+        <div class="box"><h3>Tablo Sayaçları</h3><div id="counts"></div></div>
+        <div class="box"><h3>Olay Defteri (son 15)</h3><div id="events"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <div id="toasts"></div>
+  <footer class="formfoot">
+    <span>MRF-PNL-01 v2.0 | MİRFİX YAPI KİMYASALLARI — Kurumsal Panel</span>
+    <span>AI önerir, insan onaylar · kapı kararları bu panelden verilemez</span>
+  </footer>
+</main>
+
+<script>
+/* ================================ utils ================================ */
+const $=s=>document.querySelector(s);
+const api=async p=>{const r=await fetch('/api/v1/'+p);if(!r.ok)throw new Error(p+': '+r.status);return r.json()};
+const post=async(p,body)=>{const r=await fetch('/api/v1/'+p,{method:'POST',
+  headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok)throw new Error(j.detail?.[0]?.msg||j.detay||j.detail||(p+': '+r.status));return j};
+const num=v=>{const s=(v||'').toString().trim().replace(/\./g,'').replace(',','.');
+  return s===''?null:(isNaN(+s)?null:+s)};
+const nf0=new Intl.NumberFormat('tr-TR',{maximumFractionDigits:0});
+const nf1=new Intl.NumberFormat('tr-TR',{maximumFractionDigits:1});
+const TL=v=>v==null?'—':nf0.format(v)+' ₺';
+const TLc=v=>{if(v==null)return '—';const a=Math.abs(v);
+  if(a>=1e6)return nf1.format(v/1e6)+' M ₺';
+  if(a>=1e3)return nf0.format(v/1e3)+' B ₺';return nf0.format(v)+' ₺'};
+const esc=s=>(s??'').toString().replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const dt=s=>s?s.replace('T',' ').slice(0,16):'—';
+const guven=g=>`<span class="chip g${g}" title="guven ${g}/3">g:${g}</span>`;
+
+function card(cls,eyebrow,val,delta,src){return `<div class="card ${cls}">
+  <div class="eyebrow">${eyebrow}</div><div class="val">${val}</div>
+  ${delta?`<div class="delta">${delta}</div>`:''}<div class="src">${esc(src)}</div></div>`}
+
+function table(headers,rows,numCols=[]){if(!rows.length)return '<div class="empty">Kayıt yok</div>';
+  const th=headers.map((h,i)=>`<th class="${numCols.includes(i)?'num':''}">${h}</th>`).join('');
+  const trs=rows.map(r=>'<tr>'+r.map((c,i)=>`<td class="${numCols.includes(i)?'num':''}">${c}</td>`).join('')+'</tr>').join('');
+  return `<table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`}
+
+/* ---- el yapımı SVG çizgeler (CDN'siz, çevrimdışı çalışır) ---- */
+function barGroup(el,data,keys,colors,labelKey,netKey){ /* aylık: giriş/çıkış çubuk + net çizgi */
+  const W=560,H=230,P={l:52,r:8,t:12,b:26},iw=W-P.l-P.r,ih=H-P.t-P.b;
+  const max=Math.max(...data.flatMap(d=>keys.map(k=>d[k])),1);
+  const nets=data.map(d=>d[netKey]);const nmin=Math.min(...nets,0),nmax=Math.max(...nets,0);
+  const gw=iw/data.length,bw=Math.min(20,gw/3);
+  const y=v=>P.t+ih-(v/max)*ih;
+  const yn=v=>P.t+ih-((v-nmin)/((nmax-nmin)||1))*ih;
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" style="width:100%">`;
+  for(let i=0;i<=3;i++){const gy=P.t+ih*i/3;
+    s+=`<line x1="${P.l}" y1="${gy}" x2="${W-P.r}" y2="${gy}" stroke="#EDE7DA"/>`+
+       `<text x="${P.l-6}" y="${gy+3}" text-anchor="end">${TLc(max*(1-i/3)).replace(' ₺','')}</text>`}
+  data.forEach((d,i)=>{const x0=P.l+i*gw+gw/2;
+    keys.forEach((k,j)=>{const bx=x0+(j-keys.length/2)*bw;
+      s+=`<rect x="${bx}" y="${y(d[k])}" width="${bw-2}" height="${ih+P.t-y(d[k])}" fill="${colors[j]}" rx="2"><title>${d[labelKey]} ${k}: ${TL(d[k])}</title></rect>`});
+    s+=`<text x="${x0}" y="${H-8}" text-anchor="middle">${d[labelKey].slice(2)}</text>`});
+  s+='<polyline fill="none" stroke="var(--ink)" stroke-width="2" points="'+
+     data.map((d,i)=>`${P.l+i*gw+gw/2},${yn(d[netKey])}`).join(' ')+'"/>';
+  data.forEach((d,i)=>{s+=`<circle cx="${P.l+i*gw+gw/2}" cy="${yn(d[netKey])}" r="3.5" fill="var(--ink)"><title>Net ${d[labelKey]}: ${TL(d[netKey])}</title></circle>`});
+  s+='</svg>';el.innerHTML=s}
+
+function hbar(el,rows,label,value,color='var(--brand)',fmt=TLc){
+  if(!rows.length){el.innerHTML='<div class="empty">Kayıt yok</div>';return}
+  const max=Math.max(...rows.map(r=>r[value]),1);
+  el.innerHTML='<svg viewBox="0 0 560 '+(rows.length*24+6)+'" style="width:100%">'+rows.map((r,i)=>{
+    const w=Math.max(2,(r[value]/max)*330),y=i*24+4;
+    return `<text x="0" y="${y+12}" style="fill:var(--ink)">${esc(String(r[label]).slice(0,26))}</text>
+      <rect x="192" y="${y+2}" width="${w}" height="14" rx="3" fill="${color}"><title>${esc(r[label])}: ${TL(r[value])}</title></rect>
+      <text x="${196+w}" y="${y+12}">${fmt(r[value])}</text>`}).join('')+'</svg>'}
+
+function multiline(el,legendEl,timeline){ /* WA aylık hacim: grup başına çizgi */
+  const groups=[...new Set(timeline.map(t=>t.chat_group))];
+  const months=[...new Set(timeline.map(t=>t.month))].sort();
+  if(!months.length){el.innerHTML='<div class="empty">Kayıt yok</div>';return}
+  const colors=['var(--brand)','var(--ok)','var(--ink)','var(--warn)'];
+  const W=560,H=210,P={l:36,r:8,t:10,b:24},iw=W-P.l-P.r,ih=H-P.t-P.b;
+  const max=Math.max(...timeline.map(t=>t.n),1);
+  const x=i=>P.l+(months.length===1?iw/2:i*(iw/(months.length-1)));
+  const y=v=>P.t+ih-(v/max)*ih;
+  let s=`<svg viewBox="0 0 ${W} ${H}" style="width:100%">`;
+  for(let i=0;i<=3;i++){const gy=P.t+ih*i/3;
+    s+=`<line x1="${P.l}" y1="${gy}" x2="${W-P.r}" y2="${gy}" stroke="#EDE7DA"/>`+
+       `<text x="${P.l-5}" y="${gy+3}" text-anchor="end">${Math.round(max*(1-i/3))}</text>`}
+  months.forEach((m,i)=>{if(i%2===0||months.length<8)s+=`<text x="${x(i)}" y="${H-6}" text-anchor="middle">${m.slice(2)}</text>`});
+  groups.forEach((g,gi)=>{const pts=months.map((m,i)=>{
+      const rec=timeline.find(t=>t.month===m&&t.chat_group===g);return `${x(i)},${y(rec?rec.n:0)}`});
+    s+=`<polyline fill="none" stroke="${colors[gi%4]}" stroke-width="2" points="${pts.join(' ')}"/>`});
+  s+='</svg>';el.innerHTML=s;
+  legendEl.innerHTML=groups.map((g,i)=>`<span><i style="background:${colors[i%4]}"></i>${esc(g)}</span>`).join('')}
+
+/* ================================ nav ================================ */
+const loaded={};
+document.querySelectorAll('nav a').forEach(a=>a.addEventListener('click',e=>{
+  e.preventDefault();const id=a.getAttribute('href').slice(1);
+  document.querySelectorAll('nav a').forEach(x=>x.classList.toggle('active',x===a));
+  document.querySelectorAll('main section').forEach(s=>s.classList.toggle('active',s.id===id));
+  $('#crumb-panel').textContent=a.textContent.replace(/^\d+/,'').trim();
+  if(!loaded[id]){loaded[id]=true;LOAD[id]&&LOAD[id]().catch(err=>console.error(err))}
+}));
+$('#doc-date').textContent=new Date().toLocaleDateString('tr-TR');
+
+/* ============================== yükleyiciler ============================== */
+const LOAD={
+async genel(){
+  const [ov,monthly]=await Promise.all([api('ozet'),api('kasa/aylik')]);
+  const f=ov.freshness,fEl=$('#freshness');
+  fEl.classList.toggle('live',!f.stale);
+  $('#freshness-text').textContent=(f.stale?'VERİ BAYAT · ':'CANLI · ')+'son eğitim '+dt(f.last_ingest);
+  const netCls=ov.cash.net<0?'bad':'ok';
+  $('#genel-cards').innerHTML=
+    card(netCls,'Nakit Net (5 Ay)',TLc(ov.cash.net),
+      `Giriş ${TLc(ov.cash.inflow)} · Çıkış ${TLc(ov.cash.outflow)}`,ov.cash.kaynak)+
+    card('neutral','Eski Kasa Görünür Alacak',TLc(ov.old_ledger.amount),
+      nf0.format(ov.old_ledger.count)+' cari',ov.old_ledger.kaynak)+
+    card('warn','A-Sınıfı Aktif Hedef Havuzu',TLc(ov.old_ledger.active_a_amount),
+      ov.old_ledger.active_a_count+' cari · bugün de sizinle çalışıyor',ov.old_ledger.kaynak)+
+    card(ov.okr_o1.recovered>=ov.okr_o1.target?'ok':'stale-card','OKR-O1 Kurtarım / 12M Hedef',
+      TLc(ov.okr_o1.recovered)+` <small>/ ${TLc(ov.okr_o1.target)}</small>`,'',ov.okr_o1.kaynak)+
+    card('neutral',`Sipariş Sinyali (son ${ov.wa.window_days}g)`,
+      nf0.format(ov.wa.order_signals)+' <small>mesaj</small>',
+      `≈ ${nf0.format(ov.wa.order_pallets)} palet · ${nf0.format(ov.wa.order_bags)} torba`,ov.wa.kaynak)+
+    card('neutral','Ödeme Sinyali Toplamı',TLc(ov.wa.payment_signal_amount),
+      'metinden okunan tutarlar — guven:3 olanlar',ov.wa.kaynak)+
+    card('bad','En Büyük Gider Kalemi',TLc(ov.top_expense.amount),
+      esc(ov.top_expense.counterparty||'—'),ov.top_expense.kaynak)+
+    card(ov.orders.open_count?'warn':'ok','Açık Sipariş',
+      ov.orders.open_count+` <small>/ ${ov.orders.total_count} kayıt</small>`,
+      'sekme 02 · Canlı Siparişler',ov.orders.kaynak)+
+    card(ov.compliance_violations?'bad':'ok','Eylem Planı İhlali',
+      ov.compliance_violations+' <small>/ 7 kural</small>','06.07.2026 genelgesi','uyum motoru (panel)')+
+    card(ov.price_gaps?'warn':'ok','Fiyat Listesi Boşluğu',
+      ov.price_gaps+' <small>ürün</small>','[FİYAT GİRİNİZ] alanları','MRF-SAT-FYT v1');
+  barGroup($('#chart-monthly'),monthly.veri,['inflow','outflow'],['var(--ok)','var(--bad)'],'month','net');
+  const alerts=[];
+  if(ov.cash.net<0)alerts.push(['bad','Beş aylık nakit net negatif: '+TLc(ov.cash.net)+' — Ana Kasa ters bakiye bulgusuyla birlikte okunmalı (Kasa Analiz Raporu §1).']);
+  alerts.push(['bad',`Eylem planında ${ov.compliance_violations} kural ihlalde — sekme 04.`]);
+  if(!ov.okr_o1.recovered)alerts.push(['warn','OKR-O1 kurtarım verisi henüz akmıyor: görüşme sonuçlarını sekme 05\'teki Tahsilat Kaydı formundan girin.']);
+  if(f.stale)alerts.push(['stale','Veri bayat (gri, kırmızıdan kötü) — "Yeniden Eğit" koşun.']);
+  $('#alerts').innerHTML=alerts.map(([c,t])=>`<p style="margin:8px 0"><span class="chip ${c}">●</span> ${t}</p>`).join('');
+},
+
+async siparis(){
+  const load=async()=>{
+    const [ord,sug]=await Promise.all([
+      api('siparisler?limit=60'+($('#ord-status').value?'&durum='+$('#ord-status').value:'')),
+      api('siparisler/oneriler')]);
+    const st=Object.fromEntries(ord.ozet.by_status.map(x=>[x.status,x]));
+    const open=(st.yeni?.n||0)+(st.hazirlaniyor?.n||0)+(st.sevk?.n||0);
+    $('#sip-cards').innerHTML=
+      card(open?'warn':'ok','Açık Sipariş',nf0.format(open),
+        `bugün ${ord.ozet.today} yeni kayıt`,ord.ozet.kaynak)+
+      card('neutral','Bekleyen WA Önerisi',nf0.format(sug.veri.length),
+        'onay sizde — ajan yalnız önerir','WA canlı ajanı')+
+      card('neutral','Sevk Edilen',nf0.format(st.sevk?.n||0),
+        `${nf0.format(st.sevk?.p||0)} palet · ${nf0.format(st.sevk?.b||0)} torba`,ord.ozet.kaynak)+
+      card('ok','Kapanan',nf0.format(st.kapandi?.n||0),'',ord.ozet.kaynak);
+    $('#oneriler').innerHTML=sug.veri.length?sug.veri.map(o=>`
+      <div class="oneri" data-uid="${o.msg_uid}">
+        <div class="meta">${dt(o.msg_ts)} · ${esc(o.chat_group)} · ${esc(o.sender||'?')} ${guven(o.confidence)}</div>
+        <p><b>${esc(o.customer_hint||'müşteri?')}</b> — ${esc((o.content||'').slice(0,160))}</p>
+        <div class="meta">${o.qty_pallet?nf0.format(o.qty_pallet)+' palet ':''}${o.qty_bag?nf0.format(o.qty_bag)+' torba ':''}${o.amount?TL(o.amount):''}</div>
+        <div class="toolbar" style="margin:8px 0 0">
+          <button class="primary" onclick="approveSug('${o.msg_uid}')">Onayla → forma al</button>
+          <button onclick="dismissSug('${o.msg_uid}')">Yoksay</button>
+        </div>
+      </div>`).join('')
+      :'<div class="empty">Bekleyen öneri yok — WhatsApp ajanı mesaj düşürünce burada belirir.</div>';
+    window._sugCache=Object.fromEntries(sug.veri.map(o=>[o.msg_uid,o]));
+    $('#orders').innerHTML=table(['Tarih','Müşteri','İçerik','Miktar','Tutar','Durum','→'],
+      ord.veri.map(o=>[dt(o.created_ts),`<b>${esc(o.customer||'—')}</b>`,
+        esc((o.items||'').slice(0,60))+(o.source==='whatsapp'?' <span class="chip g2">WA</span>':''),
+        [o.qty_pallet?nf0.format(o.qty_pallet)+' plt':'',o.qty_bag?nf0.format(o.qty_bag)+' trb':''].filter(Boolean).join(' + ')||'—',
+        o.amount?TL(o.amount):'—',
+        `<span class="chip ${o.status==='kapandi'?'ok':o.status==='iptal'?'stale':'warn'}">${o.status}</span>`,
+        o.status==='kapandi'||o.status==='iptal'?'':
+          `<select onchange="setOrderStatus('${o.order_uid}',this.value)" style="padding:3px 6px;font-size:11px">
+            <option value="">durum…</option><option value="hazirlaniyor">hazırlanıyor</option>
+            <option value="sevk">sevk</option><option value="kapandi">kapandı</option>
+            <option value="iptal">iptal</option></select>`]),[4]);
+  };
+  window._reloadSiparis=load;
+  $('#ord-load').onclick=load;
+  $('#of-save').onclick=async()=>{
+    const m=$('#of-msg');
+    try{
+      const j=await post('siparisler',{musteri:$('#of-musteri').value||null,
+        urunler:$('#of-urunler').value||null,palet:num($('#of-palet').value),
+        torba:num($('#of-torba').value),tutar:num($('#of-tutar').value),
+        not:$('#of-not').value||null,
+        kaynak:$('#of-wauid').value?'whatsapp':'manuel',
+        wa_msg_uid:$('#of-wauid').value||null});
+      m.textContent='✔ kaydedildi ('+j.siparis_uid+')';clearOrderForm();await load();
+    }catch(e){m.textContent='✖ '+e.message}};
+  $('#of-clear').onclick=clearOrderForm;
+  await load();
+},
+
+async kasa(){
+  const [cats,tout,tin]=await Promise.all([api('kasa/kategoriler'),
+    api('kasa/cariler?yon=out&limit=15'),api('kasa/cariler?yon=in&limit=15')]);
+  hbar($('#chart-cat'),cats.veri.filter(c=>c.outflow>0).slice(0,12),'category','outflow','var(--bad)');
+  hbar($('#top-out'),tout.veri,'counterparty','total','var(--bad)');
+  hbar($('#top-in'),tin.veri,'counterparty','total','var(--ok)');
+  $('#cash-cat').innerHTML='<option value="">Tüm kategoriler</option>'+
+    cats.veri.map(c=>`<option>${esc(c.category)}</option>`).join('');
+  const search=async()=>{const q=encodeURIComponent($('#cash-q').value),
+      k=encodeURIComponent($('#cash-cat').value);
+    const r=await api(`kasa/hareketler?limit=60${q?'&q='+q:''}${k?'&kategori='+k:''}`);
+    $('#cash-entries').innerHTML=table(['Tarih','Açıklama','Cari','Kategori','Giriş','Çıkış'],
+      r.veri.map(e=>[e.entry_date,esc(e.description||'—'),esc(e.counterparty||''),
+        esc(e.category||''),e.inflow?TL(e.inflow):'',e.outflow?TL(e.outflow):'']),[4,5])};
+  $('#cash-search').onclick=search;
+  $('#cash-q').addEventListener('keydown',e=>e.key==='Enter'&&search());
+  await search();
+},
+
+async uyum(){
+  const c=await api('uyum');
+  $('#rules').innerHTML=c.rules.map(r=>{
+    const chip=r.status==='ihlal'?'bad':r.status==='uygun'?'ok':'stale';
+    const rows=(r.rows&&r.rows.length)?('<div style="margin-top:8px">'+table(
+      Object.keys(r.rows[0]).map(k=>k.replace('_',' ')),
+      r.rows.map(x=>Object.values(x).map(v=>typeof v==='number'?TL(v):esc(v))),
+      Object.values(r.rows[0]).map((v,i)=>typeof v==='number'?i:-1).filter(i=>i>=0))+'</div>'):'';
+    return `<div class="rule ${r.status}"><h4><span class="no">K${r.no}</span> ${esc(r.name)}
+      <span class="chip ${chip}">${r.status.toUpperCase()}</span> ${guven(r.guven)}
+      <span style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--ink-2)">sınır: ${esc(r.limit)}</span></h4>
+      <p>${esc(r.detail)}</p><div class="src">kaynak · ${esc(r.kaynak)}</div>${rows}</div>`}).join('')+
+    `<p class="sub" style="margin-top:10px">${esc(c.not_)}</p>`;
+},
+
+async eski(){
+  const s=await api('eski-kasa/ozet');
+  const rec=s.okr_recovered||0;
+  const pct=Math.min(100,100*rec/(s.okr_target||1));
+  $('#eski-cards').innerHTML=
+    card('neutral','Toplam Görünür Alacak',TLc(s.by_class.reduce((a,b)=>a+(b.s||0),0)),
+      s.by_class.reduce((a,b)=>a+b.n,0)+' cari',s.kaynak)+
+    card('warn','2026 AKTİF Müşteride',TLc(s.active.s),s.active.n+' cari — kaldıraç: yeni sevkiyat',s.kaynak)+
+    card('bad','Biz Borçluyuz (mahsup havuzu)',TLc(Math.abs(s.payables.s)),
+      s.payables.n+' cari · en büyüğü Limak',s.kaynak)+
+    `<div class="card ${rec>0?'ok':'stale-card'}"><div class="eyebrow">OKR-O1 / KR1 İlerleme</div>
+      <div class="val">${TLc(rec)} <small>/ ${TLc(s.okr_target)}</small></div>
+      <div class="progress"><i style="width:${pct}%"></i></div>
+      <div class="src">Tahsilat defteri (tahsil + mahsup kayıtları)</div></div>`;
+  const loadTah=async()=>{
+    const t=await api('tahsilat?limit=15');
+    $('#tahsilat-list').innerHTML='<div class="hint">Son kayıtlar · kurtarılan: <b>'+
+      TLc(t.ozet.recovered)+'</b> · açık söz: '+TLc(t.ozet.promised)+'</div>'+
+      table(['Tarih','Cari','Tür','Tutar','Not'],
+        t.veri.map(e=>[dt(e.created_ts).slice(0,10),esc(e.cari_title),
+          `<span class="chip ${e.kind==='tahsil'?'ok':e.kind==='mahsup'?'g2':'warn'}">${e.kind}</span>`,
+          e.amount?TL(e.amount):'—',esc(e.note||e.due_date||'')]),[3])};
+  $('#tf-save').onclick=async()=>{
+    const m=$('#tf-msg');
+    if(!$('#tf-cari').value.trim()){m.textContent='✖ cari unvanı gerekli';return}
+    try{
+      await post('tahsilat',{cari:$('#tf-cari').value.trim(),tur:$('#tf-tur').value,
+        tutar:num($('#tf-tutar').value),vade:$('#tf-vade').value||null,
+        not:$('#tf-not').value||null});
+      m.textContent='✔ deftere işlendi';
+      ['tf-cari','tf-tutar','tf-vade','tf-not'].forEach(i=>$('#'+i).value='');
+      await loadTah();delete loaded['eski'];delete loaded['genel'];
+    }catch(e){m.textContent='✖ '+e.message}};
+  await loadTah();
+  hbar($('#chart-class'),s.by_class,'class_code','s','var(--brand)');
+  const load=async()=>{const cls=$('#eski-class').value;
+    const r=await api('eski-kasa/liste?limit=30'+(cls?'&sinif='+cls:''));
+    $('#eski-list').innerHTML=table(['Unvan','Eski Bakiye','Aktif?','WA Kanıt','Öncelik Notu'],
+      r.veri.map(x=>[`<b>${esc(x.title)}</b><br><small style="color:var(--stale)">${esc(x.ledger_code||'')}</small>`,
+        TL(x.amount),
+        x.active_2026==='AKTİF'?'<span class="chip ok">AKTİF</span>':'<span class="chip stale">pasif</span>',
+        esc(x.evidence||'—'),esc(x.priority_note||'')]),[1])};
+  $('#eski-load').onclick=load;await load();
+  const m=await api('eski-kasa/mahsup');
+  $('#mahsup').innerHTML=table(['Unvan','Bakiye','Aktif?'],
+    m.veri.map(x=>[esc(x.title),TL(x.amount),esc(x.active_2026||'—')]),[1]);
+},
+
+async wa(){
+  const s=await api('wa/ozet');
+  $('#wa-cards').innerHTML=s.groups.map(g=>card('neutral',esc(g.chat_group),
+      nf0.format(g.n)+' <small>mesaj</small>',
+      `${nf0.format(g.media)} medya · ${dt(g.a).slice(0,10)} → ${dt(g.b).slice(0,10)}`,'WhatsApp arşivi')).join('')+
+    s.signals.map(x=>card('neutral','Sinyal · '+esc(x.signal_type),
+      nf0.format(x.n),`ort. guven ${nf1.format(x.avg_conf)}${x.amount?' · '+TLc(x.amount):''}`,'sinyal motoru')).join('');
+  multiline($('#chart-wa'),$('#wa-legend'),s.timeline);
+  const load=async()=>{const t=$('#sig-type').value;
+    const r=await api('wa/sinyaller?tip='+t+'&limit=40');
+    $('#signals').innerHTML=table(['Zaman','Kimden / Müşteri','İçerik','Miktar','g'],
+      r.veri.map(x=>[dt(x.msg_ts),
+        `<b>${esc(x.customer_hint||x.sender)}</b><br><small style="color:var(--stale)">${esc(x.sender)}</small>`,
+        esc((x.content||'').slice(0,120)),
+        x.amount?TL(x.amount):[x.qty_pallet?nf0.format(x.qty_pallet)+' palet':'',
+          x.qty_bag?nf0.format(x.qty_bag)+' torba':''].filter(Boolean).join(' + ')||'—',
+        guven(x.confidence)]),[3])};
+  $('#sig-load').onclick=load;await load();
+},
+
+async caristok(){
+  const loadCari=async()=>{
+    const q=$('#cari-q').value.trim();
+    const c=await api('cari/liste?limit=80'+(q?'&q='+encodeURIComponent(q):''));
+    $('#cs-cards').innerHTML=
+      card('neutral','Cari Kayıt',nf0.format(c.ozet.n),'',c.ozet.kaynak)+
+      card('ok','Toplam Alacak (borçlu cariler)',TLc(c.ozet.receivable),'',c.ozet.kaynak)+
+      card('bad','Toplam Borç (alacaklı cariler)',TLc(Math.abs(c.ozet.payable)),'',c.ozet.kaynak)+
+      (window._stokCard||'');
+    $('#cari-list').innerHTML=c.veri.length?table(['Kod','Unvan','Borç','Alacak','Bakiye'],
+      c.veri.map(x=>[esc(x.ledger_code||''),esc(x.title),
+        x.debit?TL(x.debit):'—',x.credit?TL(x.credit):'—',
+        `<b style="color:${(x.balance||0)>=0?'var(--ok)':'var(--bad)'}">${TL(x.balance)}</b>`]),[2,3,4])
+      :'<div class="empty">Cari dosyası yok — adında "cari" geçen xlsx bırakın (sütunlar: unvan + borç/alacak/bakiye).</div>'};
+  const loadStok=async()=>{
+    const q=$('#stok-q').value.trim();
+    const s=await api('stok/liste?limit=100'+(q?'&q='+encodeURIComponent(q):''));
+    window._stokCard=card('neutral','Stok Kalemi',nf0.format(s.ozet.n),
+      s.ozet.amount?'≈ '+TLc(s.ozet.amount)+' değer':'',s.ozet.kaynak);
+    $('#stok-list').innerHTML=s.veri.length?table(['Kod','Ürün','Birim','Miktar','B.Fiyat','Tutar'],
+      s.veri.map(x=>[esc(x.code||''),esc(x.name),esc(x.unit||''),
+        nf1.format(x.qty||0),x.unit_price?TL(x.unit_price):'—',x.amount?TL(x.amount):'—']),[3,4,5])
+      :'<div class="empty">Stok dosyası yok — adında "stok" geçen xlsx bırakın (sütunlar: stok adı + miktar/fiyat).</div>'};
+  $('#cari-search').onclick=loadCari;$('#stok-search').onclick=loadStok;
+  $('#cari-q').addEventListener('keydown',e=>e.key==='Enter'&&loadCari());
+  $('#stok-q').addEventListener('keydown',e=>e.key==='Enter'&&loadStok());
+  await loadStok();await loadCari();
+},
+
+async urun(){
+  const [p,k]=await Promise.all([api('urunler'),api('kpi')]);
+  $('#products').innerHTML=table(['Kod','Ürün','Ambalaj','Fiyat'],
+    p.items.map(x=>[`<span style="font-family:var(--mono)">${x.code}</span>`,esc(x.name),
+      esc(x.package_info||''),
+      x.list_price?TL(x.list_price):`<span class="chip ${x.is_trade_good?'stale':'bad'}">${x.is_trade_good?'günlük':'FİYAT GİRİNİZ'}</span>`]),[3]);
+  $('#gaps').innerHTML=p.gaps.length?('<ul style="margin:6px 0;padding-left:18px;font-size:12.5px">'+
+      p.gaps.map(g=>`<li><b>${g.code}</b> ${esc(g.name)} (${esc(g.package_info)})</li>`).join('')+
+      '</ul><p class="hint">FYT yayın kuralı: bu alanlar dolmadan liste müşteriye verilmez.</p>')
+    :'<p class="hint">Boşluk yok — liste yayınlanabilir.</p>';
+  $('#kpis').innerHTML=table(['KPI','Dept','Hedef','Kırmızı'],
+    k.veri.map(x=>[`${esc(x.name)}<br><small style="color:var(--stale)">${esc(x.source_note||'')}</small>`,
+      esc(x.department.split(' ')[0]),
+      `${nf0.format(x.target_value)} ${esc(x.unit||'')} ${x.direction==='down'?'↓':'↑'}`,
+      nf0.format(x.red_value)+' '+esc(x.unit||'')]),[2,3]);
+},
+
+async veri(){
+  const s=await api('sistem');
+  const v=await api('obsidian/durum');
+  $('#vault-status').innerHTML=v.bagli
+    ?`<p class="hint" style="margin:6px 0"><span class="chip ok">BAĞLI</span> <code>${esc(v.yol)}</code><br>
+       Gelen kutusu: ${v.gelen_dosyalar.length?esc(v.gelen_dosyalar.join(', ')):'boş'} ·
+       Raporlar: ${v.raporlar.length?esc(v.raporlar.join(', ')):'henüz yazılmadı'} ·
+       Defter: ${v.defter_var?'<code>'+esc(v.defter_yolu)+'</code>':'ilk kayıtla oluşur'}</p>`
+    :`<p class="hint" style="margin:6px 0"><span class="chip stale">BAĞLI DEĞİL</span> ${esc(v.not_)}</p>`;
+  if(v.bagli)$('#vault-path').value=v.yol;
+  $('#vault-save').onclick=async()=>{const m=$('#vault-msg');
+    try{const j=await post('ayarlar/vault',{yol:$('#vault-path').value.trim()});
+      m.textContent='✔ '+j.vault;delete loaded['veri'];await LOAD.veri();loaded['veri']=true;
+    }catch(e){m.textContent='✖ '+e.message}};
+  $('#vault-write').onclick=async()=>{const m=$('#vault-msg');
+    try{const j=await post('komutlar/vault-yaz');m.textContent='✔ '+j.detay;
+    }catch(e){m.textContent='✖ '+e.message}};
+  $('#ingests').innerHTML=table(['Zaman','Kaynak','Durum','Okunan','Yüklenen'],
+    s.runs.map(r=>[dt(r.ran_at),esc(r.source),
+      `<span class="chip ${r.status==='ok'?'ok':r.status==='error'?'bad':'stale'}">${r.status}</span>`,
+      nf0.format(r.rows_in),nf0.format(r.rows_loaded)]),[3,4]);
+  $('#counts').innerHTML=table(['Tablo','Satır'],
+    Object.entries(s.table_counts).map(([t,n])=>[`<span style="font-family:var(--mono)">${t}</span>`,nf0.format(n)]),[1]);
+  $('#events').innerHTML=table(['Kod','Tip','Zaman'],
+    s.events.map(e=>[`<span style="font-family:var(--mono)">${e.event_code}</span>`,esc(e.event_type),dt(e.ts)]),[]);
+}};
+
+$('#retrain').addEventListener('click',async()=>{
+  const b=$('#retrain'),m=$('#retrain-msg');
+  b.disabled=true;m.textContent='Kaynaklar okunuyor… (birkaç saniye)';
+  try{const r=await fetch('/api/v1/komutlar/yeniden-egit',{method:'POST'});
+    const j=await r.json();
+    m.textContent=j.durum==='tamamlandi'
+      ?`✔ Eğitim bitti · ${j.ozet.sources.length} kaynak · ${j.ozet.finished}`
+      :'✖ Hata: '+j.detay;
+    Object.keys(loaded).forEach(k=>delete loaded[k]);loaded['veri']=true;
+    await LOAD.veri();await LOAD.genel().catch(()=>{});loaded['genel']=true;
+  }catch(e){m.textContent='✖ '+e.message}
+  b.disabled=false;
+});
+
+/* ===================== canlı sipariş yardımcıları ===================== */
+function clearOrderForm(){['of-musteri','of-urunler','of-palet','of-torba','of-tutar','of-not','of-wauid']
+  .forEach(i=>$('#'+i).value='');$('#of-msg').textContent=''}
+
+window.approveSug=uid=>{const o=(window._sugCache||{})[uid];if(!o)return;
+  $('#of-musteri').value=o.customer_hint||'';
+  $('#of-urunler').value=(o.content||'').split('\n').slice(0,3).join(' / ').slice(0,160);
+  $('#of-palet').value=o.qty_pallet||'';$('#of-torba').value=o.qty_bag||'';
+  $('#of-tutar').value=o.amount||'';$('#of-wauid').value=uid;
+  $('#of-msg').textContent='WA önerisi forma alındı — kontrol edip Kaydet\'e basın';
+  $('#of-musteri').focus()};
+
+window.dismissSug=async uid=>{try{await post('siparisler/oneriler/'+uid+'/yoksay');
+  window._reloadSiparis&&window._reloadSiparis()}catch(e){console.error(e)}};
+
+window.setOrderStatus=async(uid,st)=>{if(!st)return;
+  try{await post('siparisler/'+uid+'/durum',{durum:st});
+    window._reloadSiparis&&window._reloadSiparis()}catch(e){console.error(e)}};
+
+function toast(html){const d=document.createElement('div');d.className='toast';
+  d.innerHTML=html;$('#toasts').appendChild(d);setTimeout(()=>d.remove(),9000)}
+
+/* =========================== SSE canlı bağlantı =========================== */
+function connectSSE(){
+  const es=new EventSource('/api/v1/wa/canli');
+  es.onopen=()=>{const c=$('#sse-chip');if(c){c.textContent='canlı bağlantı: açık';c.className='chip ok'}};
+  es.onerror=()=>{const c=$('#sse-chip');if(c){c.textContent='canlı bağlantı: koptu — yeniden deneniyor';c.className='chip bad'}};
+  es.onmessage=ev=>{
+    let d;try{d=JSON.parse(ev.data)}catch{return}
+    if(d.tip==='order'){
+      toast(`<b>Yeni sipariş sinyali</b> · ${esc(d.musteri||d.gonderen||'?')}<br>${esc((d.metin||'').slice(0,110))}<br>
+        <small>${d.palet?d.palet+' palet ':''}${d.torba?d.torba+' torba':''} · guven ${d.guven}/3</small>`);
+      delete loaded['siparis'];
+      if(document.querySelector('#siparis.active')){loaded['siparis']=true;window._reloadSiparis&&window._reloadSiparis()}
+    }else if(d.tip==='yeniden_egitim'){
+      toast('<b>Yeniden eğitim bitti</b> · kaynaklar değişti, panel tazelendi');
+      Object.keys(loaded).forEach(k=>delete loaded[k]);
+      const act=document.querySelector('main section.active');
+      if(act&&LOAD[act.id]){LOAD[act.id]().catch(console.error);loaded[act.id]=true}
+    }};
+}
+connectSSE();
+
+LOAD.genel().then(()=>loaded['genel']=true).catch(e=>{
+  $('#genel-cards').innerHTML='<div class="empty">Veritabanı boş görünüyor — <code>python run.py --retrain</code> koşun ya da 09 sekmesinden Yeniden Eğit\'e basın.</div>';
+  console.error(e)});
+</script>
+</body>
+</html>
