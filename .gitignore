@@ -30,3 +30,9 @@
 *.exe
 *.out
 *.app
+
+# mirfix-panel: yerel veri (hassas) ve türetilmiş DB asla depoya girmez
+mirfix-panel/data/
+__pycache__/
+*.pyc
+.venv/

@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "MIRFIX Panel — çalıştır",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run.py",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "MIRFIX Panel — yeniden eğit + çalıştır",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/run.py",
+      "args": ["--retrain"],
+      "console": "integratedTerminal"
+    }
+  ]
+}
