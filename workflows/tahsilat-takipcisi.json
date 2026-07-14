@@ -1,0 +1,323 @@
+{
+  "name": "MirFix OS — Tahsilat Takipçisi",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Tahsilat Takipçisi\nHer sabah 09:00'da (hafta içi) açık faturaları tarar.\nVade durumuna göre kademeli e-posta gönderir:\n• Vade -3 gün: nazik ön-hatırlatma\n• Vade günü: ödeme günü uyarısı\n• 1-7 gün gecikme: hatırlatma + durum=Gecikti\n• 7+ gün: sert uyarı + ekibe eskalasyon\n\nAynı faturaya günde en fazla 1 e-posta gider.",
+        "height": 320,
+        "width": 380,
+        "color": 4
+      },
+      "id": "a1note1",
+      "name": "Not — Takipçi",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "a1trg",
+      "name": "Her Sabah 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -180,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "GOOGLE_SHEET_ID_BURAYA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Tahsilat"
+        },
+        "options": {}
+      },
+      "id": "a1read",
+      "name": "Faturaları Çek",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        60,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseDate(v){\n  if(v===undefined||v===null||v==='') return null;\n  const s=String(v).trim();\n  let m=s.match(/^(\\d{1,2})[.\\/-](\\d{1,2})[.\\/-](\\d{4})/);\n  if(m){ const d=DateTime.fromObject({day:+m[1],month:+m[2],year:+m[3]},{zone:'Europe/Istanbul'}); return d.isValid?d.startOf('day'):null; }\n  m=s.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);\n  if(m){ const d=DateTime.fromObject({year:+m[1],month:+m[2],day:+m[3]},{zone:'Europe/Istanbul'}); return d.isValid?d.startOf('day'):null; }\n  const d=DateTime.fromISO(s,{zone:'Europe/Istanbul'});\n  return d.isValid?d.startOf('day'):null;\n}\nfunction num(v){\n  if(v===undefined||v===null||v==='') return 0;\n  let s=String(v).replace(/[^\\d.,-]/g,'');\n  if(s.indexOf(',')>-1 && s.indexOf('.')>-1){ s=s.replace(/\\./g,'').replace(',', '.'); }\n  else if(s.indexOf(',')>-1){ s=s.replace(',', '.'); }\n  const n=parseFloat(s);\n  return isNaN(n)?0:n;\n}\nfunction fmt(n){ return Number(n).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}); }\n\nconst items=$input.all();\nconst out=[];\nconst today=$now.setZone('Europe/Istanbul').startOf('day');\nconst todayStr=today.toFormat('dd.MM.yyyy');\nconst UPCOMING=3;\n\nfor(const it of items){\n  const r=it.json;\n  const durum=String(r.durum||'').trim().toLocaleLowerCase('tr-TR');\n  if(durum==='ödendi'||durum==='odendi'||durum==='iptal'||durum==='kapandı'||durum==='kapandi') continue;\n  if(!r.email) continue;\n  const vade=parseDate(r.vade_tarihi);\n  if(!vade) continue;\n\n  const diff=Math.round(vade.diff(today,'days').days);\n  const gecikme=-diff;\n\n  let tier=null;\n  if(diff===UPCOMING) tier='yaklasiyor';\n  else if(diff===0) tier='bugun';\n  else if(gecikme>=1 && gecikme<=7) tier='gecikti';\n  else if(gecikme>7) tier='ciddi';\n  else continue;\n\n  if(String(r.son_hatirlatma_tarihi||'').trim()===todayStr) continue;\n\n  const musteri=r.musteri||'Sayın Müşterimiz';\n  const fatura=r.fatura_no||'';\n  const pb=r.para_birimi||'TL';\n  const tutar=r.tutar||'';\n  const vadeStr=vade.toFormat('dd.MM.yyyy');\n\n  let subject, body, yeniDurum=r.durum||'', severity='normal';\n  if(tier==='yaklasiyor'){\n    subject=`Hatırlatma: ${fatura} numaralı faturanızın vadesi yaklaşıyor`;\n    body=`Sayın ${musteri},\\n\\n${fatura} numaralı, ${tutar} ${pb} tutarındaki faturanızın son ödeme tarihi ${vadeStr} (3 gün sonra).\\n\\nÖdemenizi daha önce ilettiyseniz bu mesajı dikkate almayınız.\\n\\nSaygılarımızla,\\nMirFix Tahsilat`;\n  } else if(tier==='bugun'){\n    subject=`Bugün son ödeme günü — ${fatura} numaralı fatura`;\n    body=`Sayın ${musteri},\\n\\n${fatura} numaralı, ${tutar} ${pb} tutarındaki faturanızın son ödeme tarihi bugün (${vadeStr}).\\n\\nÖdemenizi bugün iletmenizi rica ederiz.\\n\\nSaygılarımızla,\\nMirFix Tahsilat`;\n  } else if(tier==='gecikti'){\n    subject=`Ödeme hatırlatması — ${fatura} (${gecikme} gün gecikti)`;\n    body=`Sayın ${musteri},\\n\\n${fatura} numaralı, ${tutar} ${pb} tutarındaki faturanızın vadesi ${vadeStr} tarihinde dolmuştur ve ${gecikme} gündür ödenmemiştir.\\n\\nEn kısa sürede ödemenizi rica ederiz. Ödemeyi yaptıysanız lütfen bilgi veriniz.\\n\\nSaygılarımızla,\\nMirFix Tahsilat`;\n    yeniDurum='Gecikti'; severity='uyari';\n  } else {\n    subject=`ÖNEMLİ — ${fatura} numaralı fatura ${gecikme} gündür ödenmemiştir`;\n    body=`Sayın ${musteri},\\n\\n${fatura} numaralı, ${tutar} ${pb} tutarındaki faturanızın vadesi ${vadeStr} tarihinde dolmuş olup ${gecikme} gündür ödenmemiştir.\\n\\nGecikmenin büyümemesi için lütfen acilen ödeme yapınız veya bizimle iletişime geçiniz.\\n\\nSaygılarımızla,\\nMirFix Tahsilat`;\n    yeniDurum='Gecikti'; severity='ciddi';\n  }\n\n  out.push({ json:{\n    fatura_no:fatura, musteri, email:r.email, tutar, para_birimi:pb,\n    vade_tarihi:vadeStr, gecikme_gun:gecikme>0?gecikme:0, tier, severity,\n    email_subject:subject, email_body:body,\n    yeni_durum:yeniDurum, yeni_son_hatirlatma:todayStr,\n    yeni_hatirlatma_sayisi:(parseInt(r.hatirlatma_sayisi)||0)+1\n  }});\n}\nreturn out;"
+      },
+      "id": "a1karar",
+      "name": "Karar (Hatırlatma Kademesi)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "={{ $json.email_subject }}",
+        "emailType": "text",
+        "message": "={{ $json.email_body }}",
+        "options": {}
+      },
+      "id": "a1mail",
+      "name": "Müşteriye Hatırlatma",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        560,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "GOOGLE_SHEET_ID_BURAYA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Tahsilat"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "fatura_no": "={{ $('Karar (Hatırlatma Kademesi)').item.json.fatura_no }}",
+            "durum": "={{ $('Karar (Hatırlatma Kademesi)').item.json.yeni_durum }}",
+            "son_hatirlatma_tarihi": "={{ $('Karar (Hatırlatma Kademesi)').item.json.yeni_son_hatirlatma }}",
+            "hatirlatma_sayisi": "={{ $('Karar (Hatırlatma Kademesi)').item.json.yeni_hatirlatma_sayisi }}"
+          },
+          "matchingColumns": [
+            "fatura_no"
+          ],
+          "schema": [
+            {
+              "id": "fatura_no",
+              "displayName": "fatura_no",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "durum",
+              "displayName": "durum",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "son_hatirlatma_tarihi",
+              "displayName": "son_hatirlatma_tarihi",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "hatirlatma_sayisi",
+              "displayName": "hatirlatma_sayisi",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a1upd",
+      "name": "Kaydı Güncelle",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        820,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sev",
+              "leftValue": "={{ $json.severity }}",
+              "rightValue": "ciddi",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "a1filter",
+      "name": "Ciddi Gecikmeleri Süz",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        560,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const items=$input.all();\nif(items.length===0) return [];\nconst toplam=items.reduce((a,i)=>a+(parseFloat(String(i.json.tutar).replace(/[^\\d.,-]/g,'').replace(/\\./g,'').replace(',', '.'))||0),0);\nconst lines=items.map(i=>`• ${i.json.fatura_no} — ${i.json.musteri} — ${i.json.tutar} ${i.json.para_birimi} — ${i.json.gecikme_gun} gün gecikme`);\nconst body=`Aşağıdaki faturalar 7 günden uzun süredir ödenmemiştir (ciddi gecikme):\\n\\n${lines.join('\\n')}\\n\\nToplam ${items.length} fatura. Lütfen bizzat ilgilenin.`;\nreturn [{ json:{ ekip_subject:`⚠️ ${items.length} fatura ciddi gecikmede`, ekip_body:body }}];"
+      },
+      "id": "a1esk",
+      "name": "Eskalasyon Özeti",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        820,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "tahsilat@mirfix.com",
+        "subject": "={{ $json.ekip_subject }}",
+        "emailType": "text",
+        "message": "={{ $json.ekip_body }}",
+        "options": {}
+      },
+      "id": "a1eskmail",
+      "name": "Ekibe Eskalasyon",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1080,
+        500
+      ]
+    }
+  ],
+  "connections": {
+    "Her Sabah 09:00": {
+      "main": [
+        [
+          {
+            "node": "Faturaları Çek",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Faturaları Çek": {
+      "main": [
+        [
+          {
+            "node": "Karar (Hatırlatma Kademesi)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Karar (Hatırlatma Kademesi)": {
+      "main": [
+        [
+          {
+            "node": "Müşteriye Hatırlatma",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Ciddi Gecikmeleri Süz",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Müşteriye Hatırlatma": {
+      "main": [
+        [
+          {
+            "node": "Kaydı Güncelle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ciddi Gecikmeleri Süz": {
+      "main": [
+        [
+          {
+            "node": "Eskalasyon Özeti",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eskalasyon Özeti": {
+      "main": [
+        [
+          {
+            "node": "Ekibe Eskalasyon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/Istanbul"
+  },
+  "tags": [
+    {
+      "name": "mirfix"
+    },
+    {
+      "name": "tahsilat"
+    }
+  ]
+}

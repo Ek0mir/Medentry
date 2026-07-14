@@ -1,3 +1,14 @@
+# MirFix OS — n8n Ajanları
+
+Bu klasördeki n8n iş akışları:
+
+| Ajan | Dosya / Kılavuz |
+|---|---|
+| Katalog & Reklam Üretim Ajanı | [`mirfix-katalog-reklam-ajani.json`](./mirfix-katalog-reklam-ajani.json) (aşağıda) |
+| Tahsilat Takipçisi + Günlük Tahsilat Raporu | [`tahsilat-os-README.md`](./tahsilat-os-README.md) |
+
+---
+
 # MirFix — Katalog & Reklam Üretim Ajanı
 
 n8n iş akışı: Google Sheet'teki "Bekliyor" durumundaki ürünleri tek tek alır, bir

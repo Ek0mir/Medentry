@@ -1,0 +1,147 @@
+{
+  "name": "MirFix OS — Günlük Tahsilat Raporu & KPI",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Günlük Tahsilat Raporu & KPI\nHer akşam 18:00'da (hafta içi) tüm tabloyu okur ve deterministik KPI özeti üretir:\n• Bugün tahsil edilen\n• Toplam açık alacak\n• Gecikmiş alacak\n• Bu hafta vadesi gelen\n• En büyük 5 gecikmiş\n\nRapor e-posta ile ekibe gider. (LLM kullanılmaz — rakamlar tablodan birebir.)",
+        "height": 300,
+        "width": 400,
+        "color": 6
+      },
+      "id": "a2note1",
+      "name": "Not — Rapor",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 18 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "a2trg",
+      "name": "Her Akşam 18:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -180,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "GOOGLE_SHEET_ID_BURAYA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Tahsilat"
+        },
+        "options": {}
+      },
+      "id": "a2read",
+      "name": "Tüm Faturaları Çek",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        80,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseDate(v){\n  if(v===undefined||v===null||v==='') return null;\n  const s=String(v).trim();\n  let m=s.match(/^(\\d{1,2})[.\\/-](\\d{1,2})[.\\/-](\\d{4})/);\n  if(m){ const d=DateTime.fromObject({day:+m[1],month:+m[2],year:+m[3]},{zone:'Europe/Istanbul'}); return d.isValid?d.startOf('day'):null; }\n  m=s.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);\n  if(m){ const d=DateTime.fromObject({year:+m[1],month:+m[2],day:+m[3]},{zone:'Europe/Istanbul'}); return d.isValid?d.startOf('day'):null; }\n  const d=DateTime.fromISO(s,{zone:'Europe/Istanbul'});\n  return d.isValid?d.startOf('day'):null;\n}\nfunction num(v){\n  if(v===undefined||v===null||v==='') return 0;\n  let s=String(v).replace(/[^\\d.,-]/g,'');\n  if(s.indexOf(',')>-1 && s.indexOf('.')>-1){ s=s.replace(/\\./g,'').replace(',', '.'); }\n  else if(s.indexOf(',')>-1){ s=s.replace(',', '.'); }\n  const n=parseFloat(s);\n  return isNaN(n)?0:n;\n}\nfunction fmt(n){ return Number(n).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}); }\n\nconst rows=$input.all().map(i=>i.json);\nconst today=$now.setZone('Europe/Istanbul').startOf('day');\nconst todayStr=today.toFormat('dd.MM.yyyy');\nconst haftaSonu=today.plus({days:7});\n\nconst ACIK=['','açık','acik','gecikti','beklemede','kısmi','kismi'];\nfunction isAcik(d){ const s=String(d||'').trim().toLocaleLowerCase('tr-TR'); return !(s==='ödendi'||s==='odendi'||s==='iptal'||s==='kapandı'||s==='kapandi'); }\n\nlet toplamAcik=0, acikAdet=0;\nlet toplamGecikmis=0, gecikmisAdet=0;\nlet toplamBuHafta=0, buHaftaAdet=0;\nlet bugunTahsil=0, bugunTahsilAdet=0;\nconst gecikmisler=[];\n\nfor(const r of rows){\n  const tutar=num(r.tutar);\n  const vade=parseDate(r.vade_tarihi);\n  const odeme=parseDate(r.odeme_tarihi);\n  const durumStr=String(r.durum||'').trim().toLocaleLowerCase('tr-TR');\n\n  if((durumStr==='ödendi'||durumStr==='odendi') && odeme && +odeme===+today){\n    bugunTahsil+=tutar; bugunTahsilAdet++;\n  }\n  if(isAcik(r.durum)){\n    toplamAcik+=tutar; acikAdet++;\n    if(vade && vade < today){\n      const g=Math.round(today.diff(vade,'days').days);\n      toplamGecikmis+=tutar; gecikmisAdet++;\n      gecikmisler.push({fatura:r.fatura_no,musteri:r.musteri,tutar,pb:r.para_birimi||'TL',gun:g});\n    } else if(vade && vade>=today && vade<=haftaSonu){\n      toplamBuHafta+=tutar; buHaftaAdet++;\n    }\n  }\n}\n\ngecikmisler.sort((a,b)=>b.tutar-a.tutar);\nconst top=gecikmisler.slice(0,5).map(x=>`   • ${x.fatura} — ${x.musteri} — ${fmt(x.tutar)} ${x.pb} — ${x.gun} gün`).join('\\n') || '   —';\n\nconst body=\n`MirFix Günlük Tahsilat Raporu — ${todayStr}\\n`+\n`====================================\\n\\n`+\n`💰 Bugün tahsil edilen: ${fmt(bugunTahsil)} TL (${bugunTahsilAdet} fatura)\\n`+\n`📂 Toplam açık alacak: ${fmt(toplamAcik)} TL (${acikAdet} fatura)\\n`+\n`🔴 Gecikmiş alacak: ${fmt(toplamGecikmis)} TL (${gecikmisAdet} fatura)\\n`+\n`📅 Bu hafta vadesi gelen: ${fmt(toplamBuHafta)} TL (${buHaftaAdet} fatura)\\n\\n`+\n`En büyük 5 gecikmiş alacak:\\n${top}\\n\\n`+\n(gecikmisAdet===0 ? 'Gecikmiş alacak yok. 👍\\n' : '')+\n`Bu rapor otomatik üretilmiştir.`;\n\nreturn [{ json:{ rapor_konu:`MirFix Tahsilat Raporu — ${todayStr}`, rapor_metni:body } }];"
+      },
+      "id": "a2kpi",
+      "name": "KPI Hesapla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        360,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "tahsilat@mirfix.com",
+        "subject": "={{ $json.rapor_konu }}",
+        "emailType": "text",
+        "message": "={{ $json.rapor_metni }}",
+        "options": {}
+      },
+      "id": "a2mail",
+      "name": "Raporu Gönder",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        640,
+        380
+      ]
+    }
+  ],
+  "connections": {
+    "Her Akşam 18:00": {
+      "main": [
+        [
+          {
+            "node": "Tüm Faturaları Çek",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tüm Faturaları Çek": {
+      "main": [
+        [
+          {
+            "node": "KPI Hesapla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KPI Hesapla": {
+      "main": [
+        [
+          {
+            "node": "Raporu Gönder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/Istanbul"
+  },
+  "tags": [
+    {
+      "name": "mirfix"
+    },
+    {
+      "name": "tahsilat"
+    }
+  ]
+}
