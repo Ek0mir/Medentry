@@ -6,6 +6,7 @@ Bu klasördeki n8n iş akışları:
 |---|---|
 | Katalog & Reklam Üretim Ajanı | [`mirfix-katalog-reklam-ajani.json`](./mirfix-katalog-reklam-ajani.json) (aşağıda) |
 | Tahsilat Takipçisi + Günlük Tahsilat Raporu | [`tahsilat-os-README.md`](./tahsilat-os-README.md) |
+| Aylık Ölçekleme & Finans Danışmanı | [`aylik-olcekleme-README.md`](./aylik-olcekleme-README.md) |
 
 ---
 

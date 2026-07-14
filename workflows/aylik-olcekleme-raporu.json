@@ -1,0 +1,234 @@
+{
+  "name": "MirFix OS — Aylık Ölçekleme & Finans Danışmanı",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Aylık Ölçekleme Ajanı\nHer ayın 1'inde 08:00'de bir önceki ayı analiz eder.\n\n1) Tahsilat tablosundan kesin rakamları hesaplar:\n   ciro, büyüme %, tahsilat oranı, açık/gecikmiş alacak, 6 aylık trend, en büyük müşteriler.\n2) Claude bu rakamları yorumlayıp ölçekleme yönlendirmesi yazar (rakam uydurmaz).\n3) Rapor yönetime e-posta ile gider.",
+        "height": 320,
+        "width": 400,
+        "color": 5
+      },
+      "id": "n1",
+      "name": "Not — Ölçekleme",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 8 1 * *"
+            }
+          ]
+        }
+      },
+      "id": "trg",
+      "name": "Her Ayın 1'i 08:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -200,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "GOOGLE_SHEET_ID_BURAYA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Tahsilat"
+        },
+        "options": {}
+      },
+      "id": "read",
+      "name": "Satış/Fatura Verisini Çek",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        40,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function parseDate(v){\n  if(v===undefined||v===null||v==='') return null;\n  const s=String(v).trim();\n  let m=s.match(/^(\\d{1,2})[.\\/-](\\d{1,2})[.\\/-](\\d{4})/);\n  if(m){ const d=DateTime.fromObject({day:+m[1],month:+m[2],year:+m[3]},{zone:'Europe/Istanbul'}); return d.isValid?d.startOf('day'):null; }\n  m=s.match(/^(\\d{4})-(\\d{1,2})-(\\d{1,2})/);\n  if(m){ const d=DateTime.fromObject({year:+m[1],month:+m[2],day:+m[3]},{zone:'Europe/Istanbul'}); return d.isValid?d.startOf('day'):null; }\n  const d=DateTime.fromISO(s,{zone:'Europe/Istanbul'});\n  return d.isValid?d.startOf('day'):null;\n}\nfunction num(v){\n  if(v===undefined||v===null||v==='') return 0;\n  let s=String(v).replace(/[^\\d.,-]/g,'');\n  if(s.indexOf(',')>-1 && s.indexOf('.')>-1){ s=s.replace(/\\./g,'').replace(',', '.'); }\n  else if(s.indexOf(',')>-1){ s=s.replace(',', '.'); }\n  const n=parseFloat(s); return isNaN(n)?0:n;\n}\nfunction fmt(n){ return Number(n).toLocaleString('tr-TR',{minimumFractionDigits:2,maximumFractionDigits:2}); }\n\nconst rows=$input.all().map(i=>i.json);\nconst now=$now.setZone('Europe/Istanbul');\nconst today=now.startOf('day');\nconst target=now.minus({months:1});\nconst prev=now.minus({months:2});\nconst mkey=(dt)=>dt.toFormat('yyyy-MM');\nconst tKey=mkey(target), pKey=mkey(prev);\n\nconst ciro={}, tahsilat={}, musteriCiro={};\nlet acikToplam=0, gecikmisToplam=0, gecikmisAdet=0;\n\nfor(const r of rows){\n  const tutar=num(r.tutar);\n  const fd=parseDate(r.fatura_tarihi);\n  const od=parseDate(r.odeme_tarihi);\n  const durum=String(r.durum||'').trim().toLocaleLowerCase('tr-TR');\n  const paid=(durum==='ödendi'||durum==='odendi');\n\n  if(fd){ const k=mkey(fd); ciro[k]=(ciro[k]||0)+tutar; if(k===tKey){ const m=r.musteri||'—'; musteriCiro[m]=(musteriCiro[m]||0)+tutar; } }\n  if(od && paid){ const k=mkey(od); tahsilat[k]=(tahsilat[k]||0)+tutar; }\n\n  const acik=!(paid||durum==='iptal'||durum==='kapandı'||durum==='kapandi');\n  if(acik){ acikToplam+=tutar; const vd=parseDate(r.vade_tarihi); if(vd && vd<today){ gecikmisToplam+=tutar; gecikmisAdet++; } }\n}\n\nconst ciroT=ciro[tKey]||0, ciroP=ciro[pKey]||0;\nconst tahsilatT=tahsilat[tKey]||0;\nconst buyume = ciroP>0 ? ((ciroT-ciroP)/ciroP*100) : null;\nconst tahsilatOrani = ciroT>0 ? (tahsilatT/ciroT*100) : null;\n\nconst trend=[];\nfor(let i=5;i>=0;i--){ const d=now.minus({months:i+1}); const k=mkey(d); trend.push({ay:d.toFormat('MM.yyyy'), ciro:ciro[k]||0}); }\n\nconst topArr=Object.entries(musteriCiro).sort((a,b)=>b[1]-a[1]).slice(0,5);\nconst topM=topArr.map(([m,v])=>`   • ${m}: ${fmt(v)} TL`).join('\\n')||'   —';\nconst trendTxt=trend.map(t=>`   ${t.ay}: ${fmt(t.ciro)} TL`).join('\\n');\nconst ayAdi=target.setLocale('tr').toFormat('LLLL yyyy');\n\nconst kpi=\n`MirFix Aylık Ölçekleme Raporu — ${ayAdi}\\n`+\n`==========================================\\n\\n`+\n`📈 Aylık ciro (satış): ${fmt(ciroT)} TL\\n`+\n`↔️  Önceki ay: ${fmt(ciroP)} TL  →  Büyüme: ${buyume===null?'—':(buyume>=0?'+':'')+buyume.toFixed(1)+'%'}\\n`+\n`💵 Bu ay tahsil edilen: ${fmt(tahsilatT)} TL  (tahsilat oranı: ${tahsilatOrani===null?'—':tahsilatOrani.toFixed(0)+'%'})\\n`+\n`📂 Toplam açık alacak: ${fmt(acikToplam)} TL\\n`+\n`🔴 Gecikmiş alacak: ${fmt(gecikmisToplam)} TL (${gecikmisAdet} fatura)\\n\\n`+\n`Son 6 ay ciro trendi:\\n${trendTxt}\\n\\n`+\n`En büyük 5 müşteri (${ayAdi}):\\n${topM}`;\n\nconst rakamlar={ay:ayAdi, ciro:ciroT, onceki_ay_ciro:ciroP, buyume_yuzde:buyume,\n  tahsilat:tahsilatT, tahsilat_orani:tahsilatOrani, acik_alacak:acikToplam,\n  gecikmis_alacak:gecikmisToplam, gecikmis_adet:gecikmisAdet, trend,\n  en_buyuk_musteriler:topArr.map(([m,v])=>({musteri:m,ciro:v}))};\n\nreturn [{ json:{ kpi_metni:kpi, rakamlar } }];"
+      },
+      "id": "kpi",
+      "name": "Aylık KPI Hesapla",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Aşağıda MirFix'in {{ $json.rakamlar.ay }} dönemine ait kesin finansal rakamları var (JSON):\n{{ JSON.stringify($json.rakamlar) }}\n\nBu rakamlara dayanarak şirketi ölçeklemek için stratejik analiz ve yönlendirmeyi yaz.",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Sen MirFix'in büyüme ve finans danışmanısın. Sana bir önceki ayın KESİN finansal rakamları JSON olarak verilir. Görevin: bu rakamları yorumlayıp şirketi ÖLÇEKLEMEK için net, uygulanabilir yönlendirme yazmak.\n\nFORMAT (düz metin, Türkçe):\n1. DURUM: Ciro, büyüme ve tahsilat sağlığını 2-3 cümlede özetle.\n2. RİSKLER: En fazla 3 madde (ör. yüksek açık alacak, müşteri yoğunlaşması, düşen tahsilat oranı). Sadece rakamların işaret ettiği riskleri yaz.\n3. ÖLÇEKLEME AKSİYONLARI: Gelecek ay için 3 somut, ölçülebilir aksiyon. Her biri 'ne yapılacak + neden' içersin.\n4. ODAK METRİĞİ: Bu ay takip edilmesi gereken tek bir sayı ve hedefi.\n\nKURALLAR:\n- Verilmeyen HİÇBİR rakamı uydurma. Yeni sayı türetme, sadece verilenleri yorumla.\n- Büyüme negatifse dürüstçe söyle, süslemeye çalışma.\n- En fazla 300 kelime. Genel-geçer klişe değil, bu verilere özel konuş."
+            }
+          ]
+        }
+      },
+      "id": "chain",
+      "name": "Stratejik Analiz (Claude)",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        600,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-5",
+        "options": {
+          "maxTokensToSample": 1500,
+          "temperature": 0.3
+        }
+      },
+      "id": "llm",
+      "name": "Claude (Danışman)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [
+        600,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const kpi=$('Aylık KPI Hesapla').item.json.kpi_metni;\nconst rakamlar=$('Aylık KPI Hesapla').item.json.rakamlar;\nconst yorum=($json.text||'').trim();\nconst body=`${kpi}\\n\\n=== STRATEJİK ANALİZ & YÖNLENDİRME ===\\n\\n${yorum}\\n\\n— Bu rapor MirFix OS tarafından otomatik üretilmiştir. Rakamlar tablodan birebir hesaplanmıştır.`;\nreturn [{ json:{ rapor_konu:`MirFix Aylık Ölçekleme Raporu — ${rakamlar.ay}`, rapor_metni:body } }];"
+      },
+      "id": "merge",
+      "name": "Raporu Birleştir",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        880,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "yonetim@mirfix.com",
+        "subject": "={{ $json.rapor_konu }}",
+        "emailType": "text",
+        "message": "={{ $json.rapor_metni }}",
+        "options": {}
+      },
+      "id": "mail",
+      "name": "Yönetime Gönder",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1160,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "Her Ayın 1'i 08:00": {
+      "main": [
+        [
+          {
+            "node": "Satış/Fatura Verisini Çek",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Satış/Fatura Verisini Çek": {
+      "main": [
+        [
+          {
+            "node": "Aylık KPI Hesapla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aylık KPI Hesapla": {
+      "main": [
+        [
+          {
+            "node": "Stratejik Analiz (Claude)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude (Danışman)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Stratejik Analiz (Claude)",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Stratejik Analiz (Claude)": {
+      "main": [
+        [
+          {
+            "node": "Raporu Birleştir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Raporu Birleştir": {
+      "main": [
+        [
+          {
+            "node": "Yönetime Gönder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/Istanbul"
+  },
+  "tags": [
+    {
+      "name": "mirfix"
+    },
+    {
+      "name": "tahsilat"
+    },
+    {
+      "name": "buyume"
+    }
+  ]
+}
