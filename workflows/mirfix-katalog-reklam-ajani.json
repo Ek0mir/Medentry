@@ -1,0 +1,1079 @@
+{
+  "name": "MirFix — Katalog & Reklam Üretim Ajanı",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## 1) SÜREKLİ TAKİP\nHer 15 dakikada bir Google Sheet'teki 'Ürünler' tablosunu tarar.\nSadece durum = 'Bekliyor' olan satırları çeker.\n\nHiç yeni ürün yoksa akış kendiliğinden durur — boşa çalışmaz.",
+        "height": 260,
+        "width": 380,
+        "color": 4
+      },
+      "id": "note1",
+      "name": "Not — Takip",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2) AJAN ÇALIŞIYOR\nHer ürün TEK TEK ajana verilir (batch = 1).\n\nAjan:\n- Higgsfield (MCP) ile görselleri üretir\n- Katalog metnini + reklam sloganlarını yazar\n- Sonucu sabit JSON şemasında döner\n\nHata olursa sağ alttaki hata koluna düşer, akış DURMAZ.",
+        "height": 300,
+        "width": 400,
+        "color": 3
+      },
+      "id": "note2",
+      "name": "Not — Ajan",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        600,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3) ARŞİV + KAPANIŞ\nGörseller Drive'a yüklenir (Higgsfield linkleri kalıcı olmayabilir).\nSheet güncellenir: durum = Tamamlandı.\nSlack'e özet düşer.\nSonra döngü bir sonraki ürüne geçer.",
+        "height": 260,
+        "width": 400,
+        "color": 5
+      },
+      "id": "note3",
+      "name": "Not — Arşiv",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1780,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4) GÜNLÜK BEKÇİ\nHer akşam 18:00'de tüm tabloyu okur, Claude özetler:\n- Bugün ne üretildi\n- 24 saatten uzun süredir 'İşleniyor'da takılan var mı\n- Hata alan ürünler\nE-posta olarak ekibe gider.",
+        "height": 260,
+        "width": 380,
+        "color": 6
+      },
+      "id": "note4",
+      "name": "Not — Bekçi",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -260,
+        760
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "trg1",
+      "name": "Zamanlayıcı (15 dk)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -180,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "GOOGLE_SHEET_ID_BURAYA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Urunler"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "durum",
+              "lookupValue": "Bekliyor"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sh1",
+      "name": "Bekleyen Ürünleri Çek",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        40,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "loop1",
+      "name": "Ürün Döngüsü",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        260,
+        340
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "done1",
+      "name": "Tur Bitti",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        480,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "GOOGLE_SHEET_ID_BURAYA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Urunler"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "urun_kodu": "={{ $json.urun_kodu }}",
+            "durum": "İşleniyor"
+          },
+          "matchingColumns": [
+            "urun_kodu"
+          ],
+          "schema": [
+            {
+              "id": "urun_kodu",
+              "displayName": "urun_kodu",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "durum",
+              "displayName": "durum",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sh2",
+      "name": "Durum: İşleniyor",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        480,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Aşağıdaki ÜRÜN için katalog metnini yaz ve görselleri üret.\n\nÜrün Kodu: {{ $('Ürün Döngüsü').first().json.urun_kodu }}\nÜrün Adı: {{ $('Ürün Döngüsü').first().json.urun_adi }}\nKategori: {{ $('Ürün Döngüsü').first().json.kategori }}\nÖzellikler: {{ $('Ürün Döngüsü').first().json.ozellikler }}\nHam Görsel URL: {{ $('Ürün Döngüsü').first().json.ham_gorsel_url }}\nEk Not: {{ $('Ürün Döngüsü').first().json.not }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Sen MirFix'in katalog ve reklam üretim ajanısın. Sana TEK bir ürün verilir; görevini bitirip JSON döneceksin.\n\n=== GÖREV ===\n1) Higgsfield araçlarıyla ham görselden 3 kreatif üret:\n   a) Katalog görseli — temiz/nötr arka plan, e-ticaret standardı (önce arka planı temizle)\n   b) Lifestyle görseli — ürünün gerçek kullanım ortamında\n   c) Reklam kreatifi — kampanya için dikkat çekici kompozisyon\n   Üçünü de baskı kalitesi için upscale et.\n2) Türkçe katalog metnini ve reklam sloganlarını yaz.\n\n=== GÖRSEL ÜRETİMİ ===\n- Görsel üretimi ASENKRON olabilir. Araç sana bir iş kimliği (job id) dönerse, iş bitene kadar durumu kontrol et. En fazla 10 kez dene; hâlâ bitmediyse o görseli atla ve 'notlar' alanına yaz.\n- Sadece GERÇEKTEN üretilmiş görsellerin URL'lerini döndür. URL uydurma. Hiç görsel üretemediysen gorsel_linkleri boş dizi olsun ve nedeni notlar'a yaz.\n\n=== METİN KURALLARI ===\n- baslik: en fazla 60 karakter. Ürün adı + en güçlü faydayı içersin.\n- katalog_metni: 2-3 cümle, 200-350 karakter. Teknik özellik listelemek yerine FAYDA anlat. Sıfat yığmaktan kaçın.\n- reklam_sloganlari: 3 alternatif, her biri en fazla 8 kelime.\n- 'En iyi', 'bir numara', 'piyasanın lideri' gibi kanıtlanamaz iddialar KULLANMA.\n- Ürün özelliklerinde OLMAYAN hiçbir bilgiyi uydurma (ölçü, malzeme, garanti, sertifika...). Eksik bilgi varsa notlar'a 'Eksik: ...' diye yaz.\n\nSadece verilen JSON şemasında yanıt ver.",
+          "maxIterations": 20,
+          "returnIntermediateSteps": false
+        }
+      },
+      "id": "agent1",
+      "name": "Katalog Ajanı",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        720,
+        440
+      ],
+      "onError": "continueErrorOutput",
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 5000
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-5",
+        "options": {
+          "maxTokensToSample": 4096,
+          "temperature": 0.4
+        }
+      },
+      "id": "llm1",
+      "name": "Claude (Ajan Beyni)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [
+        620,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "sseEndpoint": "https://mcp.higgsfield.ai/mcp",
+        "authentication": "headerAuth",
+        "include": "all"
+      },
+      "id": "mcp1",
+      "name": "Higgsfield (MCP)",
+      "type": "@n8n/n8n-nodes-langchain.mcpClientTool",
+      "typeVersion": 1,
+      "position": [
+        800,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"baslik\": { \"type\": \"string\" },\n    \"katalog_metni\": { \"type\": \"string\" },\n    \"reklam_sloganlari\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n    \"gorsel_linkleri\": { \"type\": \"array\", \"items\": { \"type\": \"string\" } },\n    \"notlar\": { \"type\": \"string\" }\n  },\n  \"required\": [\"baslik\", \"katalog_metni\", \"reklam_sloganlari\", \"gorsel_linkleri\", \"notlar\"]\n}"
+      },
+      "id": "parser1",
+      "name": "JSON Şema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        980,
+        660
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "manual",
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f1",
+              "name": "urun_kodu",
+              "value": "={{ $('Ürün Döngüsü').first().json.urun_kodu }}",
+              "type": "string"
+            },
+            {
+              "id": "f2",
+              "name": "baslik",
+              "value": "={{ $json.output.baslik }}",
+              "type": "string"
+            },
+            {
+              "id": "f3",
+              "name": "katalog_metni",
+              "value": "={{ $json.output.katalog_metni }}",
+              "type": "string"
+            },
+            {
+              "id": "f4",
+              "name": "sloganlar",
+              "value": "={{ $json.output.reklam_sloganlari.join(' | ') }}",
+              "type": "string"
+            },
+            {
+              "id": "f5",
+              "name": "gorsel_linkleri",
+              "value": "={{ $json.output.gorsel_linkleri }}",
+              "type": "array"
+            },
+            {
+              "id": "f6",
+              "name": "notlar",
+              "value": "={{ $json.output.notlar }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set1",
+      "name": "Çıktıyı Düzenle",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        980,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.gorsel_linkleri }}",
+              "rightValue": "",
+              "operator": {
+                "type": "array",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "if1",
+      "name": "Görsel Var mı?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "gorsel_linkleri",
+        "options": {}
+      },
+      "id": "split1",
+      "name": "Görselleri Ayır",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        1400,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.gorsel_linkleri }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "data"
+            }
+          }
+        }
+      },
+      "id": "http1",
+      "name": "Görseli İndir",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1580,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "name": "={{ $('Ürün Döngüsü').first().json.urun_kodu }}-{{ $itemIndex + 1 }}.png",
+        "driveId": {
+          "__rl": true,
+          "value": "My Drive",
+          "mode": "list",
+          "cachedResultName": "My Drive"
+        },
+        "folderId": {
+          "__rl": true,
+          "value": "DRIVE_KLASOR_ID_BURAYA",
+          "mode": "id"
+        },
+        "inputDataFieldName": "data",
+        "options": {}
+      },
+      "id": "drive1",
+      "name": "Drive'a Yükle",
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        1760,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateIndividualFields",
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "webViewLink",
+              "renameField": true,
+              "outputFieldName": "drive_linkleri"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "agg1",
+      "name": "Linkleri Topla",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1940,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "GOOGLE_SHEET_ID_BURAYA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Urunler"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "urun_kodu": "={{ $('Ürün Döngüsü').first().json.urun_kodu }}",
+            "durum": "Tamamlandı",
+            "baslik": "={{ $('Çıktıyı Düzenle').first().json.baslik }}",
+            "katalog_metni": "={{ $('Çıktıyı Düzenle').first().json.katalog_metni }}",
+            "sloganlar": "={{ $('Çıktıyı Düzenle').first().json.sloganlar }}",
+            "gorsel_linkleri": "={{ ($json.drive_linkleri || $('Çıktıyı Düzenle').first().json.gorsel_linkleri || []).join('\\n') }}",
+            "notlar": "={{ $('Çıktıyı Düzenle').first().json.notlar }}",
+            "islem_tarihi": "={{ $now.toFormat('dd.MM.yyyy HH:mm') }}"
+          },
+          "matchingColumns": [
+            "urun_kodu"
+          ],
+          "schema": [
+            {
+              "id": "urun_kodu",
+              "displayName": "urun_kodu",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "durum",
+              "displayName": "durum",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "baslik",
+              "displayName": "baslik",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "katalog_metni",
+              "displayName": "katalog_metni",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sloganlar",
+              "displayName": "sloganlar",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "gorsel_linkleri",
+              "displayName": "gorsel_linkleri",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notlar",
+              "displayName": "notlar",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "islem_tarihi",
+              "displayName": "islem_tarihi",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sh3",
+      "name": "Durum: Tamamlandı",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2140,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#uretim",
+          "mode": "name"
+        },
+        "text": "=✅ *{{ $('Ürün Döngüsü').first().json.urun_adi }}* ({{ $('Ürün Döngüsü').first().json.urun_kodu }}) hazır.\n\n*Başlık:* {{ $('Çıktıyı Düzenle').first().json.baslik }}\n*Metin:* {{ $('Çıktıyı Düzenle').first().json.katalog_metni }}\n*Sloganlar:* {{ $('Çıktıyı Düzenle').first().json.sloganlar }}\n*Not:* {{ $('Çıktıyı Düzenle').first().json.notlar }}",
+        "otherOptions": {}
+      },
+      "id": "slack1",
+      "name": "Ekibe Bildir",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        2340,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "GOOGLE_SHEET_ID_BURAYA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Urunler"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "urun_kodu": "={{ $('Ürün Döngüsü').first().json.urun_kodu }}",
+            "durum": "Hata",
+            "notlar": "={{ $json.error?.message || JSON.stringify($json).slice(0, 300) }}",
+            "islem_tarihi": "={{ $now.toFormat('dd.MM.yyyy HH:mm') }}"
+          },
+          "matchingColumns": [
+            "urun_kodu"
+          ],
+          "schema": [
+            {
+              "id": "urun_kodu",
+              "displayName": "urun_kodu",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "durum",
+              "displayName": "durum",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "notlar",
+              "displayName": "notlar",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "islem_tarihi",
+              "displayName": "islem_tarihi",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "sh4",
+      "name": "Durum: Hata",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        980,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "#uretim",
+          "mode": "name"
+        },
+        "text": "=🔴 *HATA* — {{ $('Ürün Döngüsü').first().json.urun_kodu }} / {{ $('Ürün Döngüsü').first().json.urun_adi }}\n\nAjan bu ürünü tamamlayamadı. Sheet'te durum = Hata olarak işaretlendi.\nDetay: {{ $('Durum: Hata').first().json.notlar }}",
+        "otherOptions": {}
+      },
+      "id": "slack2",
+      "name": "Hata Alarmı",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 18 * * 1-5"
+            }
+          ]
+        }
+      },
+      "id": "trg2",
+      "name": "Her Gün 18:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -180,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "read",
+        "documentId": {
+          "__rl": true,
+          "value": "GOOGLE_SHEET_ID_BURAYA",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Urunler"
+        },
+        "options": {}
+      },
+      "id": "sh5",
+      "name": "Tüm Ürünleri Çek",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        40,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "options": {}
+      },
+      "id": "agg2",
+      "name": "Satırları Topla",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        260,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Bugünün tarihi: {{ $now.toFormat('dd.MM.yyyy HH:mm') }}\n\nMirFix ürün üretim tablosunun tam hâli (JSON):\n{{ JSON.stringify($json.data) }}\n\nBu tabloya bakarak günlük raporu yaz.",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "Sen MirFix üretim hattının bekçisisin. Sana ürün tablosu verilir; kısa ve eyleme dönük bir günlük rapor yazarsın.\n\nRAPOR FORMATI (düz metin, e-posta için):\n1. BUGÜN TAMAMLANAN: kaç ürün, kodları.\n2. TAKILANLAR: durum = 'İşleniyor' olup islem_tarihi 24 saatten eski olanlar. Bunlar muhtemelen yarıda kalmış — açıkça uyar.\n3. HATALAR: durum = 'Hata' olanlar, kodu + hata notu.\n4. BEKLEYEN KUYRUK: durum = 'Bekliyor' kaç ürün var.\n5. ÖNERİ: en fazla 2 madde, somut aksiyon.\n\nKURALLAR:\n- Sadece tablodaki veriye dayan, yorum uydurma.\n- Hiç sorun yoksa 'Sorun yok' de, sorun icat etme.\n- En fazla 200 kelime."
+            }
+          ]
+        }
+      },
+      "id": "chain1",
+      "name": "Günlük Özet",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.5,
+      "position": [
+        480,
+        1080
+      ]
+    },
+    {
+      "parameters": {
+        "model": "claude-sonnet-4-5",
+        "options": {
+          "maxTokensToSample": 1500,
+          "temperature": 0.2
+        }
+      },
+      "id": "llm2",
+      "name": "Claude (Rapor)",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.2,
+      "position": [
+        480,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "otomasyon@mirfix.com",
+        "toEmail": "ekip@mirfix.com",
+        "subject": "=MirFix Günlük Üretim Raporu — {{ $now.toFormat('dd.MM.yyyy') }}",
+        "emailFormat": "text",
+        "text": "={{ $json.text }}",
+        "options": {}
+      },
+      "id": "mail1",
+      "name": "Rapor E-postası",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        740,
+        1080
+      ]
+    }
+  ],
+  "connections": {
+    "Zamanlayıcı (15 dk)": {
+      "main": [
+        [
+          {
+            "node": "Bekleyen Ürünleri Çek",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bekleyen Ürünleri Çek": {
+      "main": [
+        [
+          {
+            "node": "Ürün Döngüsü",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ürün Döngüsü": {
+      "main": [
+        [
+          {
+            "node": "Tur Bitti",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Durum: İşleniyor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Durum: İşleniyor": {
+      "main": [
+        [
+          {
+            "node": "Katalog Ajanı",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude (Ajan Beyni)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Katalog Ajanı",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Higgsfield (MCP)": {
+      "ai_tool": [
+        [
+          {
+            "node": "Katalog Ajanı",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "JSON Şema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Katalog Ajanı",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Katalog Ajanı": {
+      "main": [
+        [
+          {
+            "node": "Çıktıyı Düzenle",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Durum: Hata",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Çıktıyı Düzenle": {
+      "main": [
+        [
+          {
+            "node": "Görsel Var mı?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Görsel Var mı?": {
+      "main": [
+        [
+          {
+            "node": "Görselleri Ayır",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Durum: Tamamlandı",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Görselleri Ayır": {
+      "main": [
+        [
+          {
+            "node": "Görseli İndir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Görseli İndir": {
+      "main": [
+        [
+          {
+            "node": "Drive'a Yükle",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drive'a Yükle": {
+      "main": [
+        [
+          {
+            "node": "Linkleri Topla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Linkleri Topla": {
+      "main": [
+        [
+          {
+            "node": "Durum: Tamamlandı",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Durum: Tamamlandı": {
+      "main": [
+        [
+          {
+            "node": "Ekibe Bildir",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ekibe Bildir": {
+      "main": [
+        [
+          {
+            "node": "Ürün Döngüsü",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Durum: Hata": {
+      "main": [
+        [
+          {
+            "node": "Hata Alarmı",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hata Alarmı": {
+      "main": [
+        [
+          {
+            "node": "Ürün Döngüsü",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Her Gün 18:00": {
+      "main": [
+        [
+          {
+            "node": "Tüm Ürünleri Çek",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tüm Ürünleri Çek": {
+      "main": [
+        [
+          {
+            "node": "Satırları Topla",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Satırları Topla": {
+      "main": [
+        [
+          {
+            "node": "Günlük Özet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude (Rapor)": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Günlük Özet",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Günlük Özet": {
+      "main": [
+        [
+          {
+            "node": "Rapor E-postası",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "saveManualExecutions": true,
+    "timezone": "Europe/Istanbul"
+  },
+  "tags": [
+    {
+      "name": "mirfix"
+    }
+  ]
+}
