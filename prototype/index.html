@@ -1,0 +1,682 @@
+<title>Sakin Koy — Balık Tutma Prototipi (v0.1 Greybox)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+
+<style>
+  :root{
+    /* Art Bible §11.3 — derin mavi–turkuaz gradyan, sıcak mercan vurgu */
+    --sky-top:#f6b17a; --sky-bot:#7fbfd6;
+    --sea-0:#2a9fb5; --sea-1:#1e6a8f; --sea-2:#123f5c; --sea-3:#0a2436; --sea-4:#050f18;
+    --accent:#ff7a45; --accent-2:#ffa06b;
+    --gold:#ffd25c; --gold-deep:#e0a021;
+    --ink:#eaf4f8; --ink-dim:#9fb8c4;
+    --panel:#0c1e2ceb; --panel-line:#1f4a63;
+    --ok:#54d6a0; --bad:#ff6b6b;
+    --ui: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; height:100%; overflow:hidden; background:#050f18; }
+  #wrap{ position:fixed; inset:0; touch-action:none; user-select:none; -webkit-user-select:none; }
+  canvas{ display:block; width:100%; height:100%; }
+
+  /* ---------- HUD overlay ---------- */
+  .hud{ position:absolute; inset:0; pointer-events:none; font-family:var(--ui); color:var(--ink); }
+  .hud > *{ pointer-events:auto; }
+
+  .topbar{ position:absolute; top:0; left:0; right:0; display:flex; gap:10px; align-items:center;
+    padding:10px 12px; justify-content:space-between; }
+  .stat{ display:flex; align-items:center; gap:8px; background:var(--panel);
+    border:1px solid var(--panel-line); border-radius:14px; padding:7px 13px;
+    backdrop-filter:blur(6px); box-shadow:0 6px 20px #0006; }
+  .stat .ic{ font-size:18px; line-height:1; }
+  .stat .v{ font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:.3px; font-size:17px; }
+  .stat.gold .v{ color:var(--gold); }
+  .stat small{ color:var(--ink-dim); font-weight:600; font-size:11px; letter-spacing:.4px; }
+
+  .rightcol{ display:flex; gap:8px; }
+  .iconbtn{ width:40px; height:40px; border-radius:12px; background:var(--panel);
+    border:1px solid var(--panel-line); color:var(--ink); font-size:18px; cursor:pointer;
+    display:grid; place-items:center; }
+  .iconbtn:active{ transform:scale(.92); }
+
+  /* Cast button — başparmak bölgesi §11.2 (alt-sağ) */
+  #castBtn{ position:absolute; right:20px; bottom:22px; width:112px; height:112px; border-radius:50%;
+    border:none; cursor:pointer; color:#2a1400; font-family:var(--ui); font-weight:900;
+    font-size:20px; letter-spacing:1px; text-transform:uppercase;
+    background:radial-gradient(circle at 35% 30%, var(--accent-2), var(--accent) 62%, #d8481f);
+    box-shadow:0 10px 26px #ff5a2088, 0 2px 0 #ffffff44 inset, 0 -6px 14px #0004 inset;
+    transition:transform .06s ease; }
+  #castBtn:active{ transform:scale(.94); }
+  #castBtn .sub{ display:block; font-size:10px; font-weight:700; opacity:.75; letter-spacing:.5px; margin-top:2px; }
+  #castBtn.reel{ background:radial-gradient(circle at 35% 30%, #8fe0c4, #2fb98a 62%, #1c8f68); color:#04241a; box-shadow:0 10px 26px #1fbf8f88, 0 2px 0 #ffffff44 inset; }
+
+  /* Upgrade dock */
+  #upgrades{ position:absolute; left:14px; bottom:22px; display:flex; flex-direction:column; gap:8px; max-width:280px; }
+  .upg{ display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--panel-line);
+    border-radius:14px; padding:9px 11px; cursor:pointer; min-width:250px;
+    transition:border-color .15s, transform .06s; }
+  .upg:active{ transform:scale(.98); }
+  .upg.afford{ border-color:var(--accent); }
+  .upg.max{ opacity:.55; cursor:default; }
+  .upg .uic{ width:34px; height:34px; border-radius:10px; display:grid; place-items:center; font-size:18px;
+    background:#12344a; flex:none; }
+  .upg .umid{ flex:1; min-width:0; }
+  .upg .un{ font-weight:700; font-size:13px; display:flex; justify-content:space-between; gap:6px; }
+  .upg .un b{ color:var(--ink-dim); font-weight:600; font-size:11px; }
+  .upg .ud{ font-size:11px; color:var(--ink-dim); margin-top:1px; }
+  .upg .ucost{ font-weight:800; font-size:13px; color:var(--gold); font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .upg.afford .ucost{ color:var(--gold); }
+  .upg:not(.afford):not(.max) .ucost{ color:#c67a5a; }
+
+  /* FTUE hint */
+  #hint{ position:absolute; left:50%; bottom:150px; transform:translateX(-50%); text-align:center;
+    background:#0b1f2ecc; border:1px solid var(--panel-line); border-radius:12px; padding:8px 16px;
+    font-family:var(--ui); font-size:13px; color:var(--ink); opacity:0; transition:opacity .4s;
+    pointer-events:none; max-width:80vw; }
+  #hint.show{ opacity:1; }
+
+  /* Title / start overlay */
+  #title{ position:absolute; inset:0; display:grid; place-items:center; text-align:center;
+    background:radial-gradient(120% 90% at 50% 15%, #123f5ccc, #04101acc 70%, #020a10ee);
+    font-family:var(--ui); color:var(--ink); z-index:5; padding:20px; }
+  #title .card{ max-width:520px; }
+  #title h1{ font-size:clamp(30px,7vw,52px); margin:0 0 6px; font-weight:900; letter-spacing:-.5px;
+    text-shadow:0 4px 24px #0008; }
+  #title h1 .em{ color:var(--accent-2); }
+  #title .tag{ color:var(--ink-dim); font-size:14px; margin:0 0 4px; font-weight:600; }
+  #title .ver{ color:#5c7280; font-size:11px; letter-spacing:2px; text-transform:uppercase; margin-bottom:22px; }
+  #title button{ font-family:var(--ui); font-weight:900; font-size:19px; letter-spacing:.5px;
+    color:#2a1400; border:none; border-radius:16px; padding:16px 40px; cursor:pointer;
+    background:linear-gradient(180deg, var(--accent-2), var(--accent)); box-shadow:0 10px 30px #ff5a2066;
+    text-transform:uppercase; }
+  #title button:active{ transform:scale(.96); }
+  #title .how{ margin-top:20px; color:var(--ink-dim); font-size:12.5px; line-height:1.7; }
+  #title .how b{ color:var(--ink); }
+
+  .fade-out{ animation:fade .5s forwards; }
+  @keyframes fade{ to{ opacity:0; visibility:hidden; } }
+
+  @media (max-width:560px){
+    #upgrades{ max-width:220px; }
+    .upg{ min-width:0; padding:7px 9px; }
+    .upg .uic{ width:30px; height:30px; font-size:15px; }
+    #castBtn{ width:92px; height:92px; font-size:17px; right:14px; bottom:16px; }
+    .stat .v{ font-size:15px; }
+  }
+  @media (prefers-reduced-motion:reduce){ *{ animation-duration:.001ms !important; } }
+</style>
+
+<div id="wrap">
+  <canvas id="c"></canvas>
+
+  <div class="hud" id="hud" hidden>
+    <div class="topbar">
+      <div style="display:flex; gap:10px;">
+        <div class="stat gold"><span class="ic">🪙</span><div><div class="v" id="goldV">0</div><small>ALTIN</small></div></div>
+        <div class="stat"><span class="ic">📖</span><div><div class="v" id="dexV">0/0</div><small>KİTAP</small></div></div>
+      </div>
+      <div class="rightcol">
+        <div class="stat"><span class="ic">🎣</span><div><div class="v" id="depthV">0m</div><small>DERİNLİK</small></div></div>
+        <button class="iconbtn" id="muteBtn" title="Ses">🔊</button>
+      </div>
+    </div>
+
+    <div id="upgrades"></div>
+    <div id="hint"></div>
+    <button id="castBtn">AT<span class="sub">oltayı fırlat</span></button>
+  </div>
+
+  <div id="title">
+    <div class="card">
+      <p class="tag">Hybrid-Casual Idle Fishing · Greybox Prototip</p>
+      <h1>🎣 SAKİN <span class="em">KOY</span></h1>
+      <p class="ver">v0.1 · core loop testi · sanat yok</p>
+      <button id="startBtn">OYNA</button>
+      <div class="how">
+        <b>AT</b> ile oltayı bırak · kancayı <b>parmağınla / fareyle sürükleyerek</b> yönlendir<br>
+        balıklara değ, <b>SAR</b> ile çek · derine indikçe <b>daha nadir</b> balık<br>
+        altınla <b>yükseltme</b> al → daha derin, daha çok balık
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================================
+   SAKİN KOY — Balık Tutma Oyunu · FAZ 1 Greybox Prototip
+   Master Book referansları: §5 döngüler, §7 ekonomi, §10 veri, §11 UX/juice.
+   Kural (Üretim Süreci Gün 10): tek buton, kanca düşer, 5+ balık tipi,
+   kapasite, sat→altın, yükseltmeler. Sanat yok — sadece his.
+   ==========================================================================*/
+
+/* ------------------------------------------------------------------ VERİ
+   fish.csv karşılığı (§10.1). Kod veriyi taşır, içermez: hepsi bu tabloda.
+   rarity: 1..5  → çarpan §7.2: 1★=1.0 2★=1.8 3★=3.2 4★=6.0 5★=12.0
+   d0/d1: spawn derinlik bandı (m).  w: spawn ağırlığı.  val: taban değer.
+   Zone 1 "Sakin Koy" + derin bantlar → "derine in, nadir yakala" hissi.   */
+const RARITY = [null,
+  {n:"Yaygın",   mult:1.0,  star:1, col:"#b9c6cf"},
+  {n:"Sıradışı", mult:1.8,  star:2, col:"#79d17a"},
+  {n:"Nadir",    mult:3.2,  star:3, col:"#5aa9ff"},
+  {n:"Efsanevi", mult:6.0,  star:4, col:"#c98bff"},
+  {n:"Mitik",    mult:12.0, star:5, col:"#ffd25c"},
+];
+
+const FISH = [
+  // shallow commons (0-70m)
+  {id:"hamsi",   name:"Hamsi",       d0:2,  d1:60,  r:1, w:42, val:8,   sz:0.55, col:"#a9c3d4", pat:"school"},
+  {id:"istavrit",name:"İstavrit",    d0:4,  d1:80,  r:1, w:36, val:13,  sz:0.7,  col:"#8fb8c9", pat:"school"},
+  {id:"izmarit", name:"İzmarit",     d0:3,  d1:70,  r:1, w:30, val:10,  sz:0.6,  col:"#b7b39a", pat:"zigzag"},
+  {id:"kefal",   name:"Kefal",       d0:6,  d1:90,  r:1, w:24, val:20,  sz:0.9,  col:"#9aa7ad", pat:"linear"},
+  // mid (50-180m)
+  {id:"cipura",  name:"Çipura",      d0:45, d1:170, r:2, w:20, val:48,  sz:0.95, col:"#c9c07a", pat:"linear"},
+  {id:"levrek",  name:"Levrek",      d0:55, d1:190, r:2, w:17, val:66,  sz:1.05, col:"#cdd6db", pat:"darting"},
+  {id:"palamut", name:"Palamut",     d0:60, d1:200, r:2, w:14, val:88,  sz:1.1,  col:"#5f86a3", pat:"darting"},
+  {id:"lufer",   name:"Lüfer",       d0:80, d1:230, r:3, w:9,  val:170, sz:1.15, col:"#3fb5a0", pat:"darting"},
+  // deep (150-430m)
+  {id:"kalkan",  name:"Kalkan",      d0:150,d1:360, r:3, w:7,  val:250, sz:1.35, col:"#9a7b57", pat:"fleeing"},
+  {id:"fangri",  name:"Fangri",      d0:170,d1:400, r:3, w:6,  val:320, sz:1.2,  col:"#e08a86", pat:"linear"},
+  {id:"sinarit", name:"Sinarit",     d0:210,d1:440, r:4, w:3,  val:1100,sz:1.4,  col:"#e0b0c4", pat:"fleeing"},
+  {id:"orfoz",   name:"Dev Orfoz",   d0:230,d1:480, r:4, w:2.4,val:1500,sz:1.7,  col:"#6f7d5a", pat:"fleeing"}, // bölge boss
+  // abyss (400-1000m) — "vay be" bandı
+  {id:"vatoz",   name:"Vatoz",       d0:400,d1:700, r:4, w:2,  val:2100,sz:1.8,  col:"#7a6f86", pat:"linear"},
+  {id:"fener",   name:"Fener Balığı",d0:520,d1:900, r:5, w:0.8,val:6500,sz:1.5,  col:"#ffd25c", pat:"darting", glow:true},
+  {id:"ay",      name:"Ay Balığı",   d0:600,d1:1000,r:5, w:0.5,val:9000,sz:2.2,  col:"#dfe8ee", pat:"linear",  glow:true},
+];
+
+/* upgrades.csv karşılığı (§10.2) — maliyet = taban × 1.12^level (§7.2) */
+const UPGRADES = {
+  depth:   {ic:"⬇️", name:"Misina Derinliği", base:40,  grow:1.12, per:9,    unit:"m",  start:70,  max:60,
+            desc:l=>`maks derinlik ${70+l*9} m`},
+  cap:     {ic:"🪝", name:"Kanca Kapasitesi", base:70,  grow:1.16, per:1,    unit:"",   start:2,   max:12,
+            desc:l=>`aynı anda ${2+l} balık`},
+  reel:    {ic:"⚙️", name:"Makara Hızı",      base:55,  grow:1.13, per:0.14, unit:"×",  start:1,    max:24,
+            desc:l=>`sarma hızı ${(1+l*0.14).toFixed(2)}×`},
+  luck:    {ic:"🪱", name:"Şanslı Yem",       base:120, grow:1.15, per:0.16, unit:"",   start:0,    max:20,
+            desc:l=>`nadir şansı +${Math.round(l*16)}%`},
+};
+
+/* ------------------------------------------------------------------ DURUM */
+const save = loadSave();
+const state = {
+  gold: save.gold,
+  upg: save.upg,               // {depth,cap,reel,luck} seviyeleri
+  dex: new Set(save.dex),      // keşfedilen tür id'leri
+  phase: "idle",               // idle | drop | reel | result
+  fish: [],                    // dünyadaki balıklar
+  caught: [],                  // kancadaki balıklar
+  particles: [],
+  floats: [],                  // yükselen "+değer" yazıları
+  bubbles: [],
+  hook:{ x:0, y:0, targetX:0, deepest:0 },
+  cam:{ y:0 },
+  shake:0, timeScale:1, flash:0, running:false, muted:save.muted,
+  best:save.best||0, sessionGold:0,
+};
+
+/* ------------------------------------------------------------------ CANVAS */
+const cv = document.getElementById("c");
+const ctx = cv.getContext("2d");
+let W=0, H=0, DPR=1, PPM=6;   // PPM: piksel / metre
+function resize(){
+  DPR = Math.min(window.devicePixelRatio||1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  cv.width = Math.floor(W*DPR); cv.height = Math.floor(H*DPR);
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  PPM = Math.max(4.6, Math.min(7.5, H/120));  // ekranda ~120m görünsün
+}
+window.addEventListener("resize", resize); resize();
+
+/* ------------------------------------------------------------------ SES (prosedürel, asset yok) */
+let AC=null;
+function actx(){ if(!AC){ try{ AC=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){} } return AC; }
+function beep(freq, dur, type="sine", vol=0.14, slideTo=null){
+  if(state.muted) return; const ac=actx(); if(!ac) return;
+  const o=ac.createOscillator(), g=ac.createGain();
+  o.type=type; o.frequency.value=freq;
+  if(slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, ac.currentTime+dur);
+  g.gain.setValueAtTime(vol, ac.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime+dur);
+  o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime+dur);
+}
+function sfxCast(){ beep(320,0.18,"triangle",0.12,120); }
+function sfxCatch(r){ const base=280+r*90; beep(base,0.09,"square",0.1,base*1.5); }
+function sfxGold(){ beep(880,0.06,"sine",0.09,1320); setTimeout(()=>beep(1320,0.08,"sine",0.08),60); }
+function sfxRare(){ [0,90,180,300].forEach((t,i)=>setTimeout(()=>beep(523*(1+i*0.26),0.16,"triangle",0.13),t)); }
+function sfxUpg(){ beep(440,0.08,"sine",0.1,660); }
+
+/* ------------------------------------------------------------------ YARDIMCI */
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+function maxDepth(){ return UPGRADES.depth.start + state.upg.depth*UPGRADES.depth.per; }
+function capacity(){ return UPGRADES.cap.start + state.upg.cap; }
+function reelMul(){ return UPGRADES.reel.start + state.upg.reel*UPGRADES.reel.per; }
+function luckAmt(){ return state.upg.luck*UPGRADES.luck.per; }
+function upgCost(k){ const u=UPGRADES[k]; return Math.round(u.base*Math.pow(u.grow,state.upg[k])); }
+function upgMaxed(k){ return state.upg[k]>=UPGRADES[k].max; }
+function fmt(n){ n=Math.round(n);
+  if(n>=1e9)return (n/1e9).toFixed(2)+"B";
+  if(n>=1e6)return (n/1e6).toFixed(2)+"M";
+  if(n>=1e3)return (n/1e3).toFixed(n<1e4?2:1)+"K"; return ""+n; }
+
+/* Değer formülü §7.2: Değer = taban × boyut(0.8-1.6) × nadirlik × bölge(1) */
+function fishValue(f){ return Math.round(f.def.val * f.sizeMult * RARITY[f.def.r].mult); }
+
+/* ağırlıklı seçim; şanslı yem nadir türlerin ağırlığını artırır */
+function pickSpecies(depth){
+  const pool = FISH.filter(f=> depth>=f.d0-8 && depth<=f.d1+8);
+  if(!pool.length) return null;
+  const luck=luckAmt();
+  let tot=0; const ws=pool.map(f=>{ const w=f.w*(1+luck*(f.r-1)); tot+=w; return w; });
+  let r=Math.random()*tot;
+  for(let i=0;i<pool.length;i++){ r-=ws[i]; if(r<=0) return pool[i]; }
+  return pool[pool.length-1];
+}
+
+/* ------------------------------------------------------------------ BALIK SPAWN */
+function spawnFish(){
+  const md = maxDepth();
+  const depth = rnd(3, md+15);
+  const def = pickSpecies(depth);
+  if(!def) return;
+  const d = clamp(depth, def.d0, def.d1);
+  const dir = Math.random()<0.5?-1:1;
+  const worldY = d*PPM;
+  const speed = rnd(14,30) * (def.pat==="darting"?1.6:1) * (def.pat==="fleeing"?1.2:1);
+  state.fish.push({
+    def, x: dir<0? W+30 : -30, y: worldY, baseY:worldY, dir,
+    sizeMult: rnd(0.8,1.6), spd:speed, t:rnd(0,99), caught:false,
+    wob: rnd(0.6,1.4), amp: rnd(5,16),
+  });
+}
+function ensureFish(){
+  const want = 16 + Math.floor(maxDepth()/60);
+  let guard=0;
+  while(state.fish.length<want && guard++<40) spawnFish();
+}
+
+/* ------------------------------------------------------------------ GİRDİ */
+let pointerActive=false;
+function worldXFromClient(cx){ return clamp(cx, 12, W-12); }
+function onDown(e){
+  const t=e.touches?e.touches[0]:e;
+  if(state.phase==="drop"||state.phase==="reel"){ pointerActive=true; state.hook.targetX=worldXFromClient(t.clientX); }
+}
+function onMove(e){
+  if(!pointerActive) return;
+  const t=e.touches?e.touches[0]:e;
+  state.hook.targetX=worldXFromClient(t.clientX);
+  if(e.cancelable) e.preventDefault();
+}
+function onUp(){ pointerActive=false; }
+cv.addEventListener("mousedown",onDown); window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
+cv.addEventListener("touchstart",onDown,{passive:false}); window.addEventListener("touchmove",onMove,{passive:false}); window.addEventListener("touchend",onUp);
+
+/* ------------------------------------------------------------------ CAST / REEL */
+const castBtn=document.getElementById("castBtn");
+function doCast(){
+  if(state.phase!=="idle") { if(state.phase==="drop") beginReel(); return; }
+  actx();
+  state.phase="drop";
+  state.hook.x = W*0.5; state.hook.targetX = W*0.5; state.hook.y=0; state.hook.deepest=0;
+  state.caught=[];
+  castBtn.classList.add("reel"); castBtn.firstChild.textContent="SAR";
+  castBtn.querySelector(".sub").textContent="makarayı sar";
+  splash(state.hook.x, 6, 12);
+  sfxCast();
+  hideHint();
+}
+function beginReel(){ if(state.phase==="drop"){ state.phase="reel"; } }
+function finishReel(){
+  // yakalananları sat → altın (prototipte otomatik satış; karar ekranı v0.9)
+  let sum=0, bestR=0;
+  state.caught.forEach((f,i)=>{
+    const v=fishValue(f); sum+=v; bestR=Math.max(bestR,f.def.r);
+    const first=!state.dex.has(f.def.id); state.dex.add(f.def.id);
+    setTimeout(()=>{
+      addFloat(state.hook.x+rnd(-20,20), 30, "+"+fmt(v), RARITY[f.def.r].col);
+      if(f.def.r>=4) sfxRare(); else sfxGold();
+    }, i*90);
+  });
+  state.gold+=sum; state.sessionGold+=sum;
+  if(state.gold>state.best) state.best=state.gold;
+  state.phase="idle";
+  castBtn.classList.remove("reel"); castBtn.firstChild.textContent="AT";
+  castBtn.querySelector(".sub").textContent="oltayı fırlat";
+  state.fish = state.fish.filter(f=>!f.caught);   // kancadakileri dünyadan temizle
+  state.caught=[];
+  persist(); refreshHUD();
+  if(bestR>=4) bigFlash();
+}
+castBtn.addEventListener("click", doCast);
+window.addEventListener("keydown", e=>{ if(e.code==="Space"){ e.preventDefault(); doCast(); } });
+
+/* ------------------------------------------------------------------ EFEKTLER */
+function splash(x, depthM, n){ for(let i=0;i<n;i++) state.particles.push({
+  x, y:depthM*PPM, vx:rnd(-60,60), vy:rnd(-80,-10), life:rnd(.4,.8), max:.8, r:rnd(1.5,3.5), c:"#bfe8f2"}); }
+function burst(x,y,col,n){ for(let i=0;i<n;i++){ const a=rnd(0,6.28),s=rnd(30,150);
+  state.particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s-20,life:rnd(.3,.7),max:.7,r:rnd(1.5,4),c:col}); } }
+function addFloat(x,y,txt,col){ state.floats.push({x,y,txt,col,life:1.1,max:1.1}); }
+function shake(a){ state.shake=Math.min(14, state.shake+a); }
+function bigFlash(){ state.flash=1; state.timeScale=0.35; setTimeout(()=>{ state.timeScale=1; },260); }
+
+/* ------------------------------------------------------------------ GÜNCELLEME */
+let last=performance.now();
+function tick(now){
+  let dt=(now-last)/1000; last=now; dt=Math.min(dt,0.05);
+  const ts = state.timeScale;
+  const sdt = dt*ts;
+
+  if(state.running){
+    ensureFish();
+    updateFish(sdt);
+    updateHook(dt);           // kanca girişten bağımsız akıcı
+    updateCam(dt);
+    updateFx(sdt);
+    spawnBubbles(sdt);
+  }
+  draw();
+  state.shake*=0.86; if(state.shake<0.2)state.shake=0;
+  state.flash*=0.9;
+  requestAnimationFrame(tick);
+}
+
+function updateFish(dt){
+  const md=maxDepth()*PPM;
+  for(const f of state.fish){
+    if(f.caught) continue;
+    f.t+=dt;
+    let sp=f.spd;
+    // kaçan tipler kanca yakınsa hızlanır
+    if(f.def.pat==="fleeing"||f.def.pat==="darting"){
+      const dx=state.hook.x-f.x, dy=state.hook.y-f.y;
+      if(dx*dx+dy*dy < 90*90 && (state.phase==="drop")){
+        f.dir = dx>0?-1:1; sp*= (f.def.pat==="fleeing"?2.4:1.5);
+      }
+    }
+    f.x += f.dir*sp*dt;
+    f.y = f.baseY + Math.sin(f.t*f.wob)*f.amp;
+    // ekran dışına çıkınca yeniden spawn için işaretle
+    if(f.x<-60||f.x>W+60){ f.dead=true; }
+  }
+  state.fish = state.fish.filter(f=>f.caught || !f.dead);
+}
+
+function updateHook(dt){
+  const h=state.hook; const md=maxDepth();
+  if(state.phase==="drop"){
+    h.x = lerp(h.x, h.targetX, 1-Math.pow(0.0006, dt)); // yatay yönlendirme (his)
+    h.y += (120 + md*0.35) * dt;                        // iniş hızı
+    const dm=h.y/PPM;
+    h.deepest=Math.max(h.deepest, dm);
+    if(dm>md){ h.y=md*PPM; beginReel(); }
+    tryCatch();
+    if(state.caught.length>=capacity()) beginReel();
+  } else if(state.phase==="reel"){
+    h.x = lerp(h.x, h.targetX, 1-Math.pow(0.002, dt));
+    h.y -= (150*reelMul() + 40) * dt;
+    tryCatch(); // dönüşte de topla
+    // yakalananları kancaya bağla
+    for(const f of state.caught){ f.x=lerp(f.x,h.x+f.off,0.3); f.y=h.y+ f.offy; }
+    if(h.y<=0){ h.y=0; splash(h.x,3,10); shake(4); finishReel(); }
+  } else {
+    h.y=0; h.x=lerp(h.x,W*0.5,1-Math.pow(0.01,dt));
+  }
+  // yakalananları takip ettir (drop sırasında da)
+  if(state.phase==="drop"){ for(const f of state.caught){ f.x=lerp(f.x,h.x+f.off,0.25); f.y=h.y+f.offy; } }
+}
+
+function tryCatch(){
+  const h=state.hook; const cap=capacity(); if(state.caught.length>=cap) return;
+  const R=17;
+  for(const f of state.fish){
+    if(f.caught) continue;
+    const sz=8+f.def.sz*f.sizeMult*10;
+    const dx=f.x-h.x, dy=f.y-h.y;
+    if(dx*dx+dy*dy < (R+sz*0.5)*(R+sz*0.5)){
+      f.caught=true; f.off=rnd(-10,10); f.offy=rnd(6,10)+state.caught.length*4;
+      state.caught.push(f);
+      const col=RARITY[f.def.r].col;
+      burst(f.x,f.y,col, f.def.r>=4?26:12);
+      shake(f.def.r>=4?9:3.5);
+      sfxCatch(f.def.r);
+      if(f.def.r>=4){ bigFlash(); }
+      if(state.caught.length>=cap) return;
+    }
+  }
+}
+
+function updateCam(dt){
+  const surf = -H*0.32;   // idle/başlangıç: yüzey ekranın ~1/3'ünde, üstte gökyüzü
+  const target = state.phase==="idle" ? surf : Math.max(surf, state.hook.y - H*0.42);
+  state.cam.y = lerp(state.cam.y, target, 1-Math.pow(0.002,dt));
+}
+function updateFx(dt){
+  for(const p of state.particles){ p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=140*dt; p.vx*=0.98; }
+  state.particles=state.particles.filter(p=>p.life>0);
+  for(const f of state.floats){ f.life-=dt; f.y-=34*dt; }
+  state.floats=state.floats.filter(f=>f.life>0);
+  for(const b of state.bubbles){ b.y-=b.spd*dt; b.x+=Math.sin(b.y*0.02)*8*dt; b.life-=dt; }
+  state.bubbles=state.bubbles.filter(b=>b.life>0 && b.y>-20);
+}
+let bubT=0;
+function spawnBubbles(dt){
+  bubT+=dt; if(bubT>0.12){ bubT=0;
+    const depthTop=state.cam.y/PPM;
+    state.bubbles.push({x:rnd(0,W), y:(state.cam.y+H+20), spd:rnd(18,42), r:rnd(1,3.5), life:rnd(3,7)});
+  }
+}
+
+/* ------------------------------------------------------------------ ÇİZİM */
+function draw(){
+  const sx=(Math.random()*2-1)*state.shake, sy=(Math.random()*2-1)*state.shake;
+  ctx.save(); ctx.translate(sx,sy);
+  const camY=state.cam.y;
+
+  // deniz gradyanı — derinlikle kararır
+  drawSea(camY);
+  // gökyüzü + iskele yalnızca yüzeye yakınken görünür
+  if(camY < H*0.6) drawSurface(camY);
+
+  // bubbles (arka)
+  ctx.globalAlpha=0.5;
+  for(const b of state.bubbles){ ctx.beginPath(); ctx.arc(b.x, b.y-camY, b.r,0,6.28);
+    ctx.fillStyle="#bfe8f2"; ctx.fill(); }
+  ctx.globalAlpha=1;
+
+  // balıklar
+  for(const f of state.fish){ if(!f.caught) drawFish(f, camY); }
+
+  // misina + kanca
+  drawLine(camY);
+
+  // yakalanan balıklar (kancada)
+  for(const f of state.caught) drawFish(f, camY, true);
+
+  // partiküller
+  for(const p of state.particles){ ctx.globalAlpha=clamp(p.life/p.max,0,1);
+    ctx.beginPath(); ctx.arc(p.x, p.y-camY, p.r,0,6.28); ctx.fillStyle=p.c; ctx.fill(); }
+  ctx.globalAlpha=1;
+
+  // yükselen değer yazıları
+  for(const f of state.floats){ ctx.globalAlpha=clamp(f.life/f.max,0,1);
+    ctx.font="800 20px "+getUIFont(); ctx.textAlign="center";
+    ctx.lineWidth=4; ctx.strokeStyle="#04121b"; ctx.strokeText(f.txt,f.x,f.y-camY);
+    ctx.fillStyle=f.col; ctx.fillText(f.txt,f.x,f.y-camY); }
+  ctx.globalAlpha=1;
+
+  ctx.restore();
+
+  // beyaz flash (nadir yakalama)
+  if(state.flash>0.02){ ctx.fillStyle="rgba(255,240,200,"+(state.flash*0.5)+")"; ctx.fillRect(0,0,W,H); }
+}
+function getUIFont(){ return '"Segoe UI", system-ui, Arial, sans-serif'; }
+
+function drawSea(camY){
+  const g=ctx.createLinearGradient(0,0,0,H);
+  // ekranın üst/alt dünya derinliğine göre renk
+  const topD=camY/PPM, botD=(camY+H)/PPM;
+  g.addColorStop(0, seaColor(topD));
+  g.addColorStop(1, seaColor(botD));
+  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  // godrays yüzeye yakınsa
+  if(topD<80){ ctx.globalAlpha=0.06*(1-topD/80);
+    for(let i=0;i<5;i++){ const x=W*(0.15+i*0.18);
+      ctx.fillStyle="#eaffff"; ctx.beginPath();
+      ctx.moveTo(x,0); ctx.lineTo(x+40,0); ctx.lineTo(x+120, H); ctx.lineTo(x+30,H); ctx.closePath(); ctx.fill(); }
+    ctx.globalAlpha=1; }
+}
+function seaColor(depthM){
+  // 0m turkuaz → 1000m neredeyse siyah
+  const stops=[[0,"#2a9fb5"],[40,"#1e6a8f"],[130,"#123f5c"],[350,"#0a2436"],[800,"#050f18"],[1400,"#02070c"]];
+  for(let i=0;i<stops.length-1;i++){ const [a,ca]=stops[i],[b,cb]=stops[i+1];
+    if(depthM<=b){ const t=clamp((depthM-a)/(b-a),0,1); return mix(ca,cb,t); } }
+  return stops[stops.length-1][1];
+}
+function mix(c1,c2,t){ const a=hx(c1),b=hx(c2);
+  return `rgb(${Math.round(lerp(a[0],b[0],t))},${Math.round(lerp(a[1],b[1],t))},${Math.round(lerp(a[2],b[2],t))})`; }
+function hx(c){ return [parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)]; }
+
+function drawSurface(camY){
+  const sy=-camY; // dünya y=0 → ekran y = -camY
+  if(sy>H) return;
+  // gökyüzü (su üstü)
+  if(sy>0){ const g=ctx.createLinearGradient(0,0,0,Math.max(1,sy));
+    g.addColorStop(0,"#f6b17a"); g.addColorStop(1,"#7fbfd6");
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,sy);
+    // güneş
+    ctx.globalAlpha=0.85; ctx.fillStyle="#ffe6b0"; ctx.beginPath(); ctx.arc(W*0.78, sy*0.4, 26,0,6.28); ctx.fill(); ctx.globalAlpha=1;
+    // iskele + balıkçı (basit silüet)
+    const dockY=sy;
+    ctx.fillStyle="#3a2a1e"; ctx.fillRect(W*0.36, dockY-6, W*0.28, 8);       // iskele tahtası
+    ctx.fillStyle="#2a1e14"; ctx.fillRect(W*0.5-3, dockY-46, 6, 40);         // olta çubuğu (dikey)
+    ctx.save(); ctx.translate(W*0.5-26, dockY-40);
+    ctx.fillStyle="#20303a"; ctx.fillRect(0,0,14,26); ctx.beginPath(); ctx.arc(7,-4,8,0,6.28); ctx.fill(); // balıkçı
+    ctx.restore();
+  }
+  // su yüzey çizgisi
+  ctx.strokeStyle="rgba(255,255,255,.35)"; ctx.lineWidth=2; ctx.beginPath();
+  const yy=sy; ctx.moveTo(0,yy);
+  for(let x=0;x<=W;x+=24){ ctx.lineTo(x, yy+Math.sin((x*0.05)+performance.now()*0.002)*2); }
+  ctx.stroke();
+}
+
+function drawFish(f, camY, caught){
+  const x=f.x, y=f.y-camY;
+  if(y<-40||y>H+40) return;
+  const s=8+f.def.sz*f.sizeMult*10;
+  const col=f.def.col;
+  ctx.save(); ctx.translate(x,y); ctx.scale(f.dir<0?-1:1,1);
+  if(f.def.glow){ ctx.shadowColor=col; ctx.shadowBlur=16; }
+  // gövde (elips)
+  ctx.fillStyle=col; ctx.beginPath(); ctx.ellipse(0,0,s,s*0.55,0,0,6.28); ctx.fill();
+  // kuyruk
+  ctx.beginPath(); ctx.moveTo(-s*0.9,0); ctx.lineTo(-s*1.5,-s*0.5); ctx.lineTo(-s*1.5,s*0.5); ctx.closePath(); ctx.fill();
+  ctx.shadowBlur=0;
+  // göz
+  ctx.fillStyle="#0a1a22"; ctx.beginPath(); ctx.arc(s*0.5,-s*0.12,Math.max(1.4,s*0.12),0,6.28); ctx.fill();
+  // nadirlik çerçevesi (renk körü: yıldız + çerçeve §11.2)
+  if(f.def.r>=3){ ctx.strokeStyle=RARITY[f.def.r].col; ctx.globalAlpha=0.9; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.ellipse(0,0,s+3,s*0.55+3,0,0,6.28); ctx.stroke(); ctx.globalAlpha=1; }
+  ctx.restore();
+  // nadir türlerde küçük yıldız rozeti
+  if(f.def.r>=4 && !caught){ ctx.fillStyle=RARITY[f.def.r].col; ctx.font="10px "+getUIFont(); ctx.textAlign="center";
+    ctx.fillText("★".repeat(RARITY[f.def.r].star), x, y-s-4); }
+}
+
+function drawLine(camY){
+  const h=state.hook; if(state.phase==="idle") return;
+  const topX=W*0.5, topY=(-camY); // olta ucu yüzeyde
+  const hx=h.x, hy=h.y-camY;
+  ctx.strokeStyle="rgba(230,245,250,.5)"; ctx.lineWidth=1.6;
+  ctx.beginPath(); ctx.moveTo(topX, topY);
+  ctx.quadraticCurveTo((topX+hx)/2 + (state.phase==="reel"?0:6), (topY+hy)/2, hx, hy); ctx.stroke();
+  // kanca
+  ctx.save(); ctx.translate(hx,hy);
+  ctx.strokeStyle="#e8f4f8"; ctx.lineWidth=2.4; ctx.beginPath();
+  ctx.arc(0,4,5,Math.PI*0.1,Math.PI*1.5); ctx.stroke();
+  // yakalama halkası (yeşil feedback §2.1)
+  const full=state.caught.length>=capacity();
+  ctx.strokeStyle=full?"#ff6b6b":"rgba(90,230,160,.8)"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(0,0,17,0,6.28); ctx.stroke();
+  ctx.restore();
+  // derinlik etiketi (diegetic §11.2)
+  const dm=Math.round(h.y/PPM);
+  ctx.fillStyle="#eaf4f8"; ctx.font="700 12px "+getUIFont(); ctx.textAlign="left";
+  ctx.fillText(dm+" m ·  "+state.caught.length+"/"+capacity(), hx+22, hy+4);
+}
+
+/* ------------------------------------------------------------------ HUD */
+const goldV=document.getElementById("goldV"), dexV=document.getElementById("dexV"), depthV=document.getElementById("depthV");
+let goldShown=state.gold;
+function refreshHUD(){
+  dexV.textContent = state.dex.size+"/"+FISH.length;
+  depthV.textContent = Math.round(maxDepth())+"m";
+  buildUpgrades();
+}
+function buildUpgrades(){
+  const box=document.getElementById("upgrades"); box.innerHTML="";
+  for(const k of ["depth","cap","reel","luck"]){
+    const u=UPGRADES[k]; const lv=state.upg[k]; const maxed=upgMaxed(k); const cost=upgCost(k);
+    const afford=!maxed && state.gold>=cost;
+    const el=document.createElement("div");
+    el.className="upg"+(maxed?" max":afford?" afford":"");
+    el.innerHTML=`<div class="uic">${u.ic}</div>
+      <div class="umid"><div class="un">${u.name} <b>Sv.${lv}</b></div>
+      <div class="ud">${u.desc(lv)}</div></div>
+      <div class="ucost">${maxed?"MAKS":"🪙 "+fmt(cost)}</div>`;
+    if(!maxed) el.addEventListener("click",()=>buyUpg(k));
+    box.appendChild(el);
+  }
+}
+function buyUpg(k){
+  if(upgMaxed(k)) return; const cost=upgCost(k);
+  if(state.gold<cost){ shake(2); return; }
+  state.gold-=cost; state.upg[k]++; sfxUpg(); persist(); refreshHUD();
+  addFloat(80, state.cam.y/1+H*0.7, UPGRADES[k].ic, "#7fe3c0");
+}
+document.getElementById("muteBtn").addEventListener("click",e=>{
+  state.muted=!state.muted; e.target.textContent=state.muted?"🔇":"🔊"; persist();
+});
+
+/* altın sayaç animasyonu */
+setInterval(()=>{
+  if(Math.abs(goldShown-state.gold)>0.5){ goldShown=lerp(goldShown,state.gold,0.25); goldV.textContent=fmt(goldShown); }
+  else if(goldShown!==state.gold){ goldShown=state.gold; goldV.textContent=fmt(goldShown); }
+},33);
+
+/* ------------------------------------------------------------------ FTUE HINT */
+const hintEl=document.getElementById("hint");
+let hintTimer=null;
+function showHint(txt, ms=3200){ hintEl.textContent=txt; hintEl.classList.add("show");
+  clearTimeout(hintTimer); if(ms) hintTimer=setTimeout(hideHint,ms); }
+function hideHint(){ hintEl.classList.remove("show"); }
+
+/* ------------------------------------------------------------------ KAYIT */
+function persist(){
+  try{ localStorage.setItem("sakinkoy_v1", JSON.stringify({
+    gold:state.gold, upg:state.upg, dex:[...state.dex], muted:state.muted, best:state.best
+  })); }catch(e){}
+}
+function loadSave(){
+  try{ const s=JSON.parse(localStorage.getItem("sakinkoy_v1"));
+    if(s&&s.upg) return {gold:s.gold||0, upg:{depth:s.upg.depth||0,cap:s.upg.cap||0,reel:s.upg.reel||0,luck:s.upg.luck||0},
+      dex:s.dex||[], muted:!!s.muted, best:s.best||0}; }catch(e){}
+  return {gold:0, upg:{depth:0,cap:0,reel:0,luck:0}, dex:[], muted:false, best:0};
+}
+
+/* ------------------------------------------------------------------ BAŞLAT */
+document.getElementById("startBtn").addEventListener("click",()=>{
+  const t=document.getElementById("title"); t.classList.add("fade-out");
+  document.getElementById("hud").hidden=false;
+  document.getElementById("muteBtn").textContent=state.muted?"🔇":"🔊";
+  state.running=true; refreshHUD();
+  ensureFish();
+  setTimeout(()=>showHint("Kancayı sürükleyerek balıklara değ, sonra SAR"),700);
+  setTimeout(()=>{ if(state.dex.size<3) showHint("Derine indikçe daha nadir balık çıkar 🐟",3600); },9000);
+  actx();
+});
+refreshHUD();
+requestAnimationFrame(tick);
+</script>
