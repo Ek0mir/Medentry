@@ -1,4 +1,14 @@
-# 🎣 Sakin Koy — Balık Tutma Oyunu · v0.1 Greybox Prototip
+# 🎣 Sakin Koy — Balık Tutma Oyunu · v0.2 Greybox Prototip
+
+## v0.2 farkları
+- **Farklılaştırılmış balıklar:** 11 ayrı silüet (sprat, çipura, ton, orfoz,
+  kalkan, vatoz, fener, ay balığı…) — Art Bible kuralı "siluetten tanınmalı" (§11.3)
+- **Hikaye katmanı:** dedenin teknesi + yarısı boş balık defteri anlatısı; her tür
+  için gerçek bilgi (`fact_tr`, §10.1). Kitap'ı duygusal olarak motive eder → "yaşayan
+  meta" farklılaşma sütunu (§3.2)
+- **Keşif kartı:** yeni tür yakalanınca isim + ★ + nadirlik + gerçek bilgi + defter sayacı
+- **Geliştirilmiş balıkçı:** sırtı dönük, kasketli, teknede oturan; sarmada geriye yaslanır
+
 
 Master Book & Blueprint dokümanlarının **FAZ 1 prototipi**. Amaç tek şey: core loop
 ("oltayı atmak") tek başına, sanat olmadan eğlenceli mi? (Üretim Süreci — KAPI 1)
