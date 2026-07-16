@@ -49,8 +49,34 @@
   #castBtn .sub{ display:block; font-size:10px; font-weight:700; opacity:.75; letter-spacing:.5px; margin-top:2px; }
   #castBtn.reel{ background:radial-gradient(circle at 35% 30%, #8fe0c4, #2fb98a 62%, #1c8f68); color:#04241a; box-shadow:0 10px 26px #1fbf8f88, 0 2px 0 #ffffff44 inset; }
 
-  /* Upgrade dock */
-  #upgrades{ position:absolute; left:14px; bottom:22px; display:flex; flex-direction:column; gap:8px; max-width:280px; }
+  /* Joystick — sol başparmak (tekne sürme) */
+  #joy{ position:absolute; left:18px; bottom:20px; width:112px; height:112px; border-radius:50%;
+    background:#0c1e2c66; border:1.5px solid var(--panel-line); backdrop-filter:blur(4px);
+    touch-action:none; transition:opacity .25s; }
+  #joy.dim{ opacity:.35; }
+  #joyStick{ position:absolute; left:50%; top:50%; width:48px; height:48px; border-radius:50%;
+    transform:translate(-50%,-50%); pointer-events:none;
+    background:radial-gradient(circle at 35% 30%, #7fd7e8, #2f8ba8 65%, #1d5f78);
+    box-shadow:0 4px 12px #0007, 0 2px 0 #ffffff33 inset; }
+
+  /* Yükseltme: toggle + alt sheet */
+  #upgToggle{ position:absolute; right:148px; bottom:44px; display:flex; align-items:center; gap:6px;
+    background:var(--panel); border:1px solid var(--panel-line); color:var(--ink);
+    font-family:var(--ui); font-weight:800; font-size:13px; letter-spacing:.6px;
+    border-radius:14px; padding:11px 16px; cursor:pointer; }
+  #upgToggle:active{ transform:scale(.95); }
+  #upgToggle.afford{ border-color:var(--accent); box-shadow:0 0 16px #ff7a4555; }
+  #upgBadge{ width:9px; height:9px; border-radius:50%; background:var(--accent); display:inline-block; }
+  #upgBadge[hidden]{ display:none; }
+  #upgSheet{ position:absolute; left:50%; bottom:0; transform:translate(-50%,105%);
+    width:min(430px,94vw); background:var(--panel); border:1px solid var(--panel-line); border-bottom:none;
+    border-radius:18px 18px 0 0; padding:10px 12px 16px;
+    transition:transform .28s cubic-bezier(.2,.9,.25,1); backdrop-filter:blur(8px); z-index:3; }
+  #upgSheet.open{ transform:translate(-50%,0); }
+  #upgSheet .sheetHead{ display:flex; justify-content:space-between; align-items:center;
+    font-family:var(--ui); font-weight:800; font-size:14px; color:var(--ink); padding:2px 4px 10px; }
+  #upgSheet .sheetHead button{ background:none; border:none; color:var(--ink-dim); font-size:16px; cursor:pointer; }
+  #upgrades{ display:flex; flex-direction:column; gap:8px; }
   .upg{ display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid var(--panel-line);
     border-radius:14px; padding:9px 11px; cursor:pointer; min-width:250px;
     transition:border-color .15s, transform .06s; }
@@ -116,10 +142,11 @@
   @keyframes fade{ to{ opacity:0; visibility:hidden; } }
 
   @media (max-width:560px){
-    #upgrades{ max-width:220px; }
     .upg{ min-width:0; padding:7px 9px; }
     .upg .uic{ width:30px; height:30px; font-size:15px; }
     #castBtn{ width:92px; height:92px; font-size:17px; right:14px; bottom:16px; }
+    #joy{ width:96px; height:96px; left:12px; bottom:14px; }
+    #upgToggle{ right:118px; bottom:32px; padding:9px 12px; font-size:12px; }
     .stat .v{ font-size:15px; }
   }
   @media (prefers-reduced-motion:reduce){ *{ animation-duration:.001ms !important; } }
@@ -140,7 +167,12 @@
       </div>
     </div>
 
-    <div id="upgrades"></div>
+    <div id="joy"><div id="joyStick"></div></div>
+    <button id="upgToggle">⬆️ <span>YÜKSELT</span> <i id="upgBadge" hidden></i></button>
+    <div id="upgSheet">
+      <div class="sheetHead">Yükseltmeler <button id="upgClose">✕</button></div>
+      <div id="upgrades"></div>
+    </div>
     <div id="hint"></div>
     <button id="castBtn">AT<span class="sub">oltayı fırlat</span></button>
 
@@ -158,15 +190,15 @@
     <div class="card">
       <p class="tag">Hybrid-Casual Idle Fishing · Greybox Prototip</p>
       <h1>🎣 SAKİN <span class="em">KOY</span></h1>
-      <p class="ver">v0.2 · core loop testi · sanat yok</p>
+      <p class="ver">v0.3 · core loop testi · sanat yok</p>
       <p class="story">Dedenin teknesi yıllardır koyda bağlı duruyordu.<br>
         Geriye bir tek onun eski <b>balık defteri</b> kaldı — yarısı boş.<br>
         Bugün ipi sen çözüyorsun: defteri doldur, koyu yeniden canlandır.</p>
       <button id="startBtn">OLTAYI ÇÖZ</button>
       <div class="how">
-        <b>AT</b> ile oltayı bırak · kancayı <b>parmağınla / fareyle sürükleyerek</b> yönlendir<br>
-        balıklara değ, <b>SAR</b> ile çek · derine indikçe <b>daha nadir</b> balık<br>
-        her yeni tür <b>deftere</b> işlenir · altınla <b>yükseltme</b> al
+        🕹️ <b>joystick</b> ile tekneyi sür — açık deniz derinleşir, <b>şamandıraları</b> izle<br>
+        <b>AT</b> ile oltayı bırak · kancayı <b>sürükleyerek</b> yönlendir · <b>SAR</b> ile çek<br>
+        her yeni tür <b>deftere</b> işlenir · altınla <b>yükseltme</b> al (⬆️)
       </div>
     </div>
   </div>
@@ -256,7 +288,9 @@ const state = {
   floats: [],                  // yükselen "+değer" yazıları
   bubbles: [],
   hook:{ x:0, y:0, targetX:0, deepest:0 },
-  cam:{ y:0 },
+  cam:{ x:0, y:0 },
+  boat:{ x:save.boatX, vx:0 },
+  joyX:0, keyX:0,
   shake:0, timeScale:1, flash:0, running:false, muted:save.muted,
   best:save.best||0, sessionGold:0,
 };
@@ -273,6 +307,21 @@ function resize(){
   PPM = Math.max(4.6, Math.min(7.5, H/120));  // ekranda ~120m görünsün
 }
 window.addEventListener("resize", resize); resize();
+
+/* ------------------------------------------------------------------ DÜNYA
+   Yatay dünya: solda iskele, sağa açıldıkça dip derinleşir (Abis'e doğru).
+   Joystick tekneyi sürer → nadir tür hem UZAĞA gitmeyi hem UZUN misinayı ister.
+   Böylece hareket core loop'a bağlanır; süs değil, ilerleme ekseni olur.     */
+const WORLD_W = 4600, DOCK_X = 300;
+function seabedDepth(x){                    // metre cinsinden yerel dip
+  let t = (x-DOCK_X)/(WORLD_W-DOCK_X-120); t = t<0?0 : t>1?1 : t;
+  return 26 + Math.pow(t,1.55)*1080 + 10*Math.sin(x*0.004) + 6*Math.sin(x*0.013);
+}
+const BUOYS = [];
+(function(){ const marks=[80,250,600,1000];
+  for(let x=DOCK_X; x<WORLD_W && marks.length; x+=8){
+    if(seabedDepth(x)>=marks[0]){ BUOYS.push({x, label:marks[0]+" m"}); marks.shift(); } }
+})();
 
 /* ------------------------------------------------------------------ SES (prosedürel, asset yok) */
 let AC=null;
@@ -324,41 +373,68 @@ function pickSpecies(depth){
 /* ------------------------------------------------------------------ BALIK SPAWN */
 function spawnFish(){
   const md = maxDepth();
-  const depth = rnd(3, md+15);
+  const x = state.cam.x + rnd(-220, W+220);        // kamera çevresinde doğar
+  const bed = seabedDepth(x);
+  const depth = rnd(3, Math.min(md+15, bed-3));    // yerel dip sınırlar → sığda sığ türler
+  if(!(depth>3)) return;
   const def = pickSpecies(depth);
   if(!def) return;
-  const d = clamp(depth, def.d0, def.d1);
+  const d = Math.min(clamp(depth, def.d0, def.d1), bed-2);
   const dir = Math.random()<0.5?-1:1;
   const worldY = d*PPM;
   const speed = rnd(14,30) * (def.pat==="darting"?1.6:1) * (def.pat==="fleeing"?1.2:1);
   state.fish.push({
-    def, x: dir<0? W+30 : -30, y: worldY, baseY:worldY, dir,
+    def, x, y: worldY, baseY:worldY, dir,
     sizeMult: rnd(0.8,1.6), spd:speed, t:rnd(0,99), caught:false,
     wob: rnd(0.6,1.4), amp: rnd(5,16),
   });
 }
 function ensureFish(){
-  const want = 16 + Math.floor(maxDepth()/60);
+  const want = 18 + Math.floor(Math.min(maxDepth(), seabedDepth(state.cam.x+W*0.5))/60);
   let guard=0;
   while(state.fish.length<want && guard++<40) spawnFish();
 }
 
-/* ------------------------------------------------------------------ GİRDİ */
-let pointerActive=false;
-function worldXFromClient(cx){ return clamp(cx, 12, W-12); }
-function onDown(e){
-  const t=e.touches?e.touches[0]:e;
-  if(state.phase==="drop"||state.phase==="reel"){ pointerActive=true; state.hook.targetX=worldXFromClient(t.clientX); }
+/* ------------------------------------------------------------------ GİRDİ
+   Pointer tabanlı: sol başparmak joystick (tekne), sağ başparmak kanca.
+   İki parmak aynı anda — pointerId ile ayrışır, çakışmaz.                 */
+let dragId=null;
+function worldXFromClient(cx){ return clamp(cx + state.cam.x, 12, WORLD_W-12); }
+cv.addEventListener("pointerdown", e=>{
+  if(state.phase==="drop"||state.phase==="reel"){
+    dragId=e.pointerId; state.hook.targetX=worldXFromClient(e.clientX);
+  }
+});
+window.addEventListener("pointermove", e=>{
+  if(e.pointerId===dragId) state.hook.targetX=worldXFromClient(e.clientX);
+});
+window.addEventListener("pointerup", e=>{ if(e.pointerId===dragId) dragId=null; });
+window.addEventListener("pointercancel", e=>{ if(e.pointerId===dragId) dragId=null; });
+
+/* joystick */
+const joyEl=document.getElementById("joy"), joyStick=document.getElementById("joyStick");
+let joyId=null;
+function joySet(e){
+  const r=joyEl.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+  let dx=e.clientX-cx, dy=e.clientY-cy; const m=Math.hypot(dx,dy)||1, cl=Math.min(m,36);
+  dx=dx/m*cl; dy=dy/m*cl;
+  joyStick.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  state.joyX = dx/36;
 }
-function onMove(e){
-  if(!pointerActive) return;
-  const t=e.touches?e.touches[0]:e;
-  state.hook.targetX=worldXFromClient(t.clientX);
-  if(e.cancelable) e.preventDefault();
+function joyReset(){ joyId=null; state.joyX=0; joyStick.style.transform="translate(-50%,-50%)"; }
+joyEl.addEventListener("pointerdown", e=>{ joyId=e.pointerId; joyEl.setPointerCapture?.(e.pointerId); joySet(e); e.stopPropagation(); });
+joyEl.addEventListener("pointermove", e=>{ if(e.pointerId===joyId) joySet(e); });
+joyEl.addEventListener("pointerup",   e=>{ if(e.pointerId===joyId) joyReset(); });
+joyEl.addEventListener("pointercancel",e=>{ if(e.pointerId===joyId) joyReset(); });
+
+/* klavye: ← → veya A / D */
+const heldKeys=new Set();
+window.addEventListener("keydown", e=>{ heldKeys.add(e.code); updKeyX(); });
+window.addEventListener("keyup",   e=>{ heldKeys.delete(e.code); updKeyX(); });
+function updKeyX(){
+  state.keyX=(heldKeys.has("ArrowRight")||heldKeys.has("KeyD")?1:0)
+            -(heldKeys.has("ArrowLeft") ||heldKeys.has("KeyA")?1:0);
 }
-function onUp(){ pointerActive=false; }
-cv.addEventListener("mousedown",onDown); window.addEventListener("mousemove",onMove); window.addEventListener("mouseup",onUp);
-cv.addEventListener("touchstart",onDown,{passive:false}); window.addEventListener("touchmove",onMove,{passive:false}); window.addEventListener("touchend",onUp);
 
 /* ------------------------------------------------------------------ CAST / REEL */
 const castBtn=document.getElementById("castBtn");
@@ -366,7 +442,7 @@ function doCast(){
   if(state.phase!=="idle") { if(state.phase==="drop") beginReel(); return; }
   actx();
   state.phase="drop";
-  state.hook.x = W*0.5; state.hook.targetX = W*0.5; state.hook.y=0; state.hook.deepest=0;
+  state.hook.x = state.boat.x+16; state.hook.targetX = state.hook.x; state.hook.y=0; state.hook.deepest=0;
   state.caught=[];
   castBtn.classList.add("reel"); castBtn.firstChild.textContent="SAR";
   castBtn.querySelector(".sub").textContent="makarayı sar";
@@ -438,6 +514,7 @@ function tick(now){
 
   if(state.running){
     ensureFish();
+    updateBoat(dt);
     updateFish(sdt);
     updateHook(dt);           // kanca girişten bağımsız akıcı
     updateCam(dt);
@@ -465,8 +542,9 @@ function updateFish(dt){
     }
     f.x += f.dir*sp*dt;
     f.y = f.baseY + Math.sin(f.t*f.wob)*f.amp;
-    // ekran dışına çıkınca yeniden spawn için işaretle
-    if(f.x<-60||f.x>W+60){ f.dead=true; }
+    // kameradan uzaklaşınca veya dibe gömülünce yeniden spawn için işaretle
+    if(Math.abs(f.x-(state.cam.x+W*0.5))>W*1.6) f.dead=true;
+    if(f.y>(seabedDepth(f.x)-1)*PPM) f.dead=true;
   }
   state.fish = state.fish.filter(f=>f.caught || !f.dead);
 }
@@ -478,7 +556,9 @@ function updateHook(dt){
     h.y += (120 + md*0.35) * dt;                        // iniş hızı
     const dm=h.y/PPM;
     h.deepest=Math.max(h.deepest, dm);
+    const bed=seabedDepth(h.x);
     if(dm>md){ h.y=md*PPM; beginReel(); }
+    else if(dm>bed-2){ h.y=(bed-2)*PPM; burst(h.x,h.y,"#b9a37e",8); beginReel(); } // dibe çarptı
     tryCatch();
     if(state.caught.length>=capacity()) beginReel();
   } else if(state.phase==="reel"){
@@ -489,7 +569,7 @@ function updateHook(dt){
     for(const f of state.caught){ f.x=lerp(f.x,h.x+f.off,0.3); f.y=h.y+ f.offy; }
     if(h.y<=0){ h.y=0; splash(h.x,3,10); shake(4); finishReel(); }
   } else {
-    h.y=0; h.x=lerp(h.x,W*0.5,1-Math.pow(0.01,dt));
+    h.y=0; h.x=lerp(h.x,state.boat.x+16,1-Math.pow(0.01,dt));
   }
   // yakalananları takip ettir (drop sırasında da)
   if(state.phase==="drop"){ for(const f of state.caught){ f.x=lerp(f.x,h.x+f.off,0.25); f.y=h.y+f.offy; } }
@@ -515,10 +595,33 @@ function tryCatch(){
   }
 }
 
+/* Tekne sürüşü — yalnız misina toplanmışken (idle) */
+let wakeT=0, joyHintT=0;
+function updateBoat(dt){
+  const j=clamp(state.joyX+state.keyX,-1,1);
+  if(state.phase==="idle"){
+    state.boat.vx += j*640*dt;
+  } else if(Math.abs(j)>0.5){
+    joyHintT+=dt; if(joyHintT>0.6){ showHint("Önce SAR ile misinayı topla ⚓",1800); joyHintT=-3; }
+  }
+  state.boat.vx = clamp(state.boat.vx,-250,250)*Math.exp(-2.6*dt);
+  state.boat.x = clamp(state.boat.x + state.boat.vx*dt, DOCK_X+160, WORLD_W-160);
+  // hareket ederken köpük izi
+  wakeT += dt*Math.abs(state.boat.vx);
+  if(wakeT>26 && Math.abs(state.boat.vx)>40){ wakeT=0;
+    state.particles.push({x:state.boat.x-Math.sign(state.boat.vx)*70+rnd(-16,16), y:2*PPM,
+      vx:-state.boat.vx*0.25+rnd(-14,14), vy:rnd(-46,-14), life:rnd(.35,.6), max:.6, r:rnd(1.5,3.2), c:"#cfeef6"});
+  }
+  joyEl.classList.toggle("dim", state.phase!=="idle");
+}
+
 function updateCam(dt){
   const surf = -H*0.32;   // idle/başlangıç: yüzey ekranın ~1/3'ünde, üstte gökyüzü
   const target = state.phase==="idle" ? surf : Math.max(surf, state.hook.y - H*0.42);
   state.cam.y = lerp(state.cam.y, target, 1-Math.pow(0.002,dt));
+  const fx = state.phase==="idle" ? state.boat.x : state.hook.x;
+  const tx = clamp(fx - W*0.5, 0, WORLD_W - W);
+  state.cam.x = lerp(state.cam.x, tx, 1-Math.pow(0.004,dt));
 }
 function updateFx(dt){
   for(const p of state.particles){ p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=140*dt; p.vx*=0.98; }
@@ -531,8 +634,7 @@ function updateFx(dt){
 let bubT=0;
 function spawnBubbles(dt){
   bubT+=dt; if(bubT>0.12){ bubT=0;
-    const depthTop=state.cam.y/PPM;
-    state.bubbles.push({x:rnd(0,W), y:(state.cam.y+H+20), spd:rnd(18,42), r:rnd(1,3.5), life:rnd(3,7)});
+    state.bubbles.push({x:state.cam.x+rnd(0,W), y:(state.cam.y+H+20), spd:rnd(18,42), r:rnd(1,3.5), life:rnd(3,7)});
   }
 }
 
@@ -540,16 +642,18 @@ function spawnBubbles(dt){
 function draw(){
   const sx=(Math.random()*2-1)*state.shake, sy=(Math.random()*2-1)*state.shake;
   ctx.save(); ctx.translate(sx,sy);
-  const camY=state.cam.y;
+  const camY=state.cam.y, camX=state.cam.x;
 
   // deniz gradyanı — derinlikle kararır
   drawSea(camY);
+  // deniz dibi (balıkların arkasında)
+  drawSeabed(camX,camY);
   // gökyüzü + iskele yalnızca yüzeye yakınken görünür
-  if(camY < H*0.6) drawSurface(camY);
+  if(camY < H*0.6) drawSurface(camX,camY);
 
   // bubbles (arka)
   ctx.globalAlpha=0.5;
-  for(const b of state.bubbles){ ctx.beginPath(); ctx.arc(b.x, b.y-camY, b.r,0,6.28);
+  for(const b of state.bubbles){ ctx.beginPath(); ctx.arc(b.x-camX, b.y-camY, b.r,0,6.28);
     ctx.fillStyle="#bfe8f2"; ctx.fill(); }
   ctx.globalAlpha=1;
 
@@ -564,14 +668,14 @@ function draw(){
 
   // partiküller
   for(const p of state.particles){ ctx.globalAlpha=clamp(p.life/p.max,0,1);
-    ctx.beginPath(); ctx.arc(p.x, p.y-camY, p.r,0,6.28); ctx.fillStyle=p.c; ctx.fill(); }
+    ctx.beginPath(); ctx.arc(p.x-camX, p.y-camY, p.r,0,6.28); ctx.fillStyle=p.c; ctx.fill(); }
   ctx.globalAlpha=1;
 
   // yükselen değer yazıları
   for(const f of state.floats){ ctx.globalAlpha=clamp(f.life/f.max,0,1);
     ctx.font="800 20px "+getUIFont(); ctx.textAlign="center";
-    ctx.lineWidth=4; ctx.strokeStyle="#04121b"; ctx.strokeText(f.txt,f.x,f.y-camY);
-    ctx.fillStyle=f.col; ctx.fillText(f.txt,f.x,f.y-camY); }
+    ctx.lineWidth=4; ctx.strokeStyle="#04121b"; ctx.strokeText(f.txt,f.x-camX,f.y-camY);
+    ctx.fillStyle=f.col; ctx.fillText(f.txt,f.x-camX,f.y-camY); }
   ctx.globalAlpha=1;
 
   ctx.restore();
@@ -606,29 +710,83 @@ function mix(c1,c2,t){ const a=hx(c1),b=hx(c2);
   return `rgb(${Math.round(lerp(a[0],b[0],t))},${Math.round(lerp(a[1],b[1],t))},${Math.round(lerp(a[2],b[2],t))})`; }
 function hx(c){ return [parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)]; }
 
-function drawSurface(camY){
+function drawSeabed(camX,camY){
+  const step=42, yAt=x=>seabedDepth(x)*PPM-camY;
+  let minY=1e9;
+  for(let x=camX-step;x<=camX+W+step;x+=step) minY=Math.min(minY,yAt(x));
+  if(minY>H+40) return;                       // görünmüyorsa çizme
+  ctx.beginPath(); let started=false;
+  for(let x=camX-step;x<=camX+W+step;x+=step){
+    const sxp=x-camX, syp=yAt(x);
+    started?ctx.lineTo(sxp,syp):(ctx.moveTo(sxp,syp),started=true);
+  }
+  ctx.lineTo(W+step,H+80); ctx.lineTo(-step,H+80); ctx.closePath();
+  ctx.fillStyle="#0b1b23"; ctx.fill();
+  ctx.strokeStyle="#1e3a49"; ctx.lineWidth=3; ctx.stroke();
+  // tek tük kayalar (deterministik konum)
+  ctx.fillStyle="#132835";
+  for(let gx=Math.floor((camX-120)/170)*170; gx<camX+W+120; gx+=170){
+    const r=12+Math.abs((gx*7919)>>3)%22, yy=seabedDepth(gx+40)*PPM-camY;
+    if(yy<H+50){ ctx.beginPath(); ctx.arc(gx+40-camX, yy+5, r, Math.PI, 0); ctx.fill(); }
+  }
+}
+
+function drawDock(camX, sy){
+  if(DOCK_X-camX < -80) return;               // ekran dışı
+  ctx.fillStyle="#4a3423";
+  for(const px of [40,120,200,272]) ctx.fillRect(px-4-camX, sy-4, 8, 26);   // kazıklar
+  ctx.fillStyle="#6b4a2e"; ctx.fillRect(-camX, sy-14, DOCK_X, 10);          // platform
+  ctx.fillStyle="#57391f";
+  for(let px=0; px<DOCK_X; px+=26) ctx.fillRect(px-camX, sy-14, 2, 10);     // tahta araları
+  // tabela: SAKİN KOY
+  ctx.fillStyle="#3a2a1e"; ctx.fillRect(118-camX, sy-52, 6, 38);
+  ctx.fillStyle="#7a5636"; ctx.fillRect(66-camX, sy-64, 110, 20);
+  ctx.fillStyle="#ffd9a0"; ctx.font="700 11px "+getUIFont(); ctx.textAlign="center";
+  ctx.fillText("SAKİN KOY", 121-camX, sy-50);
+}
+
+function drawBuoys(camX, sy){
+  const t=performance.now()*0.0016;
+  for(const b of BUOYS){
+    const x=b.x-camX; if(x<-60||x>W+60) continue;
+    const bob=Math.sin(t+b.x)*2.5;
+    ctx.fillStyle="#0c1e2c"; ctx.fillRect(x-1.2, sy-22+bob, 2.4, 20);       // direk
+    ctx.fillStyle="#ffd25c"; ctx.beginPath();                                // flama
+    ctx.moveTo(x+1,sy-22+bob); ctx.lineTo(x+14,sy-18+bob); ctx.lineTo(x+1,sy-14+bob);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle="#ff7a45"; ctx.beginPath(); ctx.arc(x, sy-1+bob, 7,0,6.28); ctx.fill(); // top
+    ctx.font="700 11px "+getUIFont(); ctx.textAlign="center"; ctx.fillStyle="#eaf4f8cc";
+    ctx.fillText(b.label, x, sy-28+bob);
+  }
+}
+
+function drawSurface(camX,camY){
   const sy=-camY; // dünya y=0 → ekran y = -camY
   if(sy>H) return;
-  // gökyüzü (su üstü)
-  if(sy>0){ const g=ctx.createLinearGradient(0,0,0,Math.max(1,sy));
+  if(sy>0){ // gökyüzü (su üstü)
+    const g=ctx.createLinearGradient(0,0,0,Math.max(1,sy));
     g.addColorStop(0,"#f6b17a"); g.addColorStop(1,"#7fbfd6");
     ctx.fillStyle=g; ctx.fillRect(0,0,W,sy);
-    // güneş
-    ctx.globalAlpha=0.85; ctx.fillStyle="#ffe6b0"; ctx.beginPath(); ctx.arc(W*0.78, sy*0.4, 26,0,6.28); ctx.fill(); ctx.globalAlpha=1;
-    // iskele + tekne + balıkçı
-    const dockY=sy;
-    // küçük tekne (dedenin teknesi)
+    // güneş (hafif paralaks)
+    ctx.globalAlpha=0.85; ctx.fillStyle="#ffe6b0";
+    ctx.beginPath(); ctx.arc(W*0.78 - camX*0.05, sy*0.4, 26,0,6.28); ctx.fill(); ctx.globalAlpha=1;
+    drawDock(camX, sy);
+    drawBuoys(camX, sy);
+    // tekne — joystick ile sürülür; hızla hafif yatar
+    const bx=state.boat.x-camX, tilt=clamp(state.boat.vx*0.0009,-0.12,0.12);
+    ctx.save(); ctx.translate(bx, sy-4); ctx.rotate(tilt);
     ctx.fillStyle="#5a3d28"; ctx.beginPath();
-    ctx.moveTo(W*0.30,dockY-4); ctx.lineTo(W*0.64,dockY-4);
-    ctx.quadraticCurveTo(W*0.61,dockY+16,W*0.47,dockY+16);
-    ctx.quadraticCurveTo(W*0.33,dockY+16,W*0.30,dockY-4); ctx.closePath(); ctx.fill();
-    ctx.fillStyle="#734f34"; ctx.fillRect(W*0.30,dockY-8,W*0.34,5);          // güverte kenarı
-    drawFisherman(W*0.44, dockY-8, state.phase, performance.now()*0.001);
+    ctx.moveTo(-130,0); ctx.lineTo(130,0);
+    ctx.quadraticCurveTo(112,20,55,20); ctx.lineTo(-55,20);
+    ctx.quadraticCurveTo(-112,20,-130,0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle="#734f34"; ctx.fillRect(-130,-5,260,5);                   // güverte kenarı
+    ctx.restore();
+    drawFisherman(bx-14, sy-12, state.phase, performance.now()*0.001);
   }
-  // su yüzey çizgisi
+  // su yüzey çizgisi (dünya fazlı — kayarken akar)
   ctx.strokeStyle="rgba(255,255,255,.35)"; ctx.lineWidth=2; ctx.beginPath();
   const yy=sy; ctx.moveTo(0,yy);
-  for(let x=0;x<=W;x+=24){ ctx.lineTo(x, yy+Math.sin((x*0.05)+performance.now()*0.002)*2); }
+  for(let x=0;x<=W;x+=24){ ctx.lineTo(x, yy+Math.sin(((x+camX)*0.05)+performance.now()*0.002)*2); }
   ctx.stroke();
 }
 
@@ -745,7 +903,7 @@ function drawFishShape(s, shape, t){
 }
 
 function drawFish(f, camY, caught){
-  const x=f.x, y=f.y-camY;
+  const x=f.x-state.cam.x, y=f.y-camY;
   if(y<-40||y>H+40) return;
   const s=8+f.def.sz*f.sizeMult*10;
   const col=f.def.col; const sh=f.def.shape||"bass";
@@ -770,8 +928,9 @@ function drawFish(f, camY, caught){
 
 function drawLine(camY){
   const h=state.hook; if(state.phase==="idle") return;
-  const topX=W*0.5, topY=(-camY); // olta ucu yüzeyde
-  const hx=h.x, hy=h.y-camY;
+  const camX=state.cam.x;
+  const topX=state.boat.x+12-camX, topY=-camY-44;  // olta ucundan
+  const hx=h.x-camX, hy=h.y-camY;
   ctx.strokeStyle="rgba(230,245,250,.5)"; ctx.lineWidth=1.6;
   ctx.beginPath(); ctx.moveTo(topX, topY);
   ctx.quadraticCurveTo((topX+hx)/2 + (state.phase==="reel"?0:6), (topY+hy)/2, hx, hy); ctx.stroke();
@@ -817,16 +976,29 @@ function buyUpg(k){
   if(upgMaxed(k)) return; const cost=upgCost(k);
   if(state.gold<cost){ shake(2); return; }
   state.gold-=cost; state.upg[k]++; sfxUpg(); persist(); refreshHUD();
-  addFloat(80, state.cam.y/1+H*0.7, UPGRADES[k].ic, "#7fe3c0");
+  addFloat(state.cam.x+W*0.5, state.cam.y+H*0.55, UPGRADES[k].ic, "#7fe3c0");
 }
 document.getElementById("muteBtn").addEventListener("click",e=>{
   state.muted=!state.muted; e.target.textContent=state.muted?"🔇":"🔊"; persist();
 });
 
+/* yükseltme sheet aç/kapa + "alınabilir" rozeti */
+const upgSheet=document.getElementById("upgSheet"),
+      upgToggle=document.getElementById("upgToggle"),
+      upgBadge=document.getElementById("upgBadge");
+upgToggle.addEventListener("click",()=>{ upgSheet.classList.toggle("open"); refreshHUD(); });
+document.getElementById("upgClose").addEventListener("click",()=>upgSheet.classList.remove("open"));
+function updateBadge(){
+  const any=["depth","cap","reel","luck"].some(k=>!upgMaxed(k)&&state.gold>=upgCost(k));
+  upgToggle.classList.toggle("afford",any);
+  upgBadge.hidden=!any;
+}
+
 /* altın sayaç animasyonu */
 setInterval(()=>{
   if(Math.abs(goldShown-state.gold)>0.5){ goldShown=lerp(goldShown,state.gold,0.25); goldV.textContent=fmt(goldShown); }
   else if(goldShown!==state.gold){ goldShown=state.gold; goldV.textContent=fmt(goldShown); }
+  updateBadge();
 },33);
 
 /* ------------------------------------------------------------------ FTUE HINT */
@@ -839,14 +1011,15 @@ function hideHint(){ hintEl.classList.remove("show"); }
 /* ------------------------------------------------------------------ KAYIT */
 function persist(){
   try{ localStorage.setItem("sakinkoy_v1", JSON.stringify({
-    gold:state.gold, upg:state.upg, dex:[...state.dex], muted:state.muted, best:state.best
+    gold:state.gold, upg:state.upg, dex:[...state.dex], muted:state.muted, best:state.best,
+    boatX:Math.round(state.boat.x)
   })); }catch(e){}
 }
 function loadSave(){
   try{ const s=JSON.parse(localStorage.getItem("sakinkoy_v1"));
     if(s&&s.upg) return {gold:s.gold||0, upg:{depth:s.upg.depth||0,cap:s.upg.cap||0,reel:s.upg.reel||0,luck:s.upg.luck||0},
-      dex:s.dex||[], muted:!!s.muted, best:s.best||0}; }catch(e){}
-  return {gold:0, upg:{depth:0,cap:0,reel:0,luck:0}, dex:[], muted:false, best:0};
+      dex:s.dex||[], muted:!!s.muted, best:s.best||0, boatX:s.boatX||560}; }catch(e){}
+  return {gold:0, upg:{depth:0,cap:0,reel:0,luck:0}, dex:[], muted:false, best:0, boatX:560};
 }
 
 /* ------------------------------------------------------------------ BAŞLAT */
@@ -854,10 +1027,12 @@ document.getElementById("startBtn").addEventListener("click",()=>{
   const t=document.getElementById("title"); t.classList.add("fade-out");
   document.getElementById("hud").hidden=false;
   document.getElementById("muteBtn").textContent=state.muted?"🔇":"🔊";
+  state.cam.x = clamp(state.boat.x - W*0.5, 0, WORLD_W - W);
   state.running=true; refreshHUD();
   ensureFish();
-  setTimeout(()=>showHint("Kancayı sürükleyerek balıklara değ, sonra SAR"),700);
-  setTimeout(()=>{ if(state.dex.size<3) showHint("Derine indikçe daha nadir balık çıkar 🐟",3600); },9000);
+  setTimeout(()=>showHint("🕹️ Joystick ile tekneyi sür — şamandıralar derin suları işaretler",4200),700);
+  setTimeout(()=>{ if(state.dex.size<3) showHint("AT ile oltayı bırak, kancayı sürükleyerek balıklara değ",3800); },6400);
+  setTimeout(()=>{ if(state.dex.size<5) showHint("Açık denizde dip derinleşir → daha nadir türler 🐟",3600); },14000);
   actx();
 });
 refreshHUD();

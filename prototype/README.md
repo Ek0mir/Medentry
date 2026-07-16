@@ -1,4 +1,15 @@
-# 🎣 Sakin Koy — Balık Tutma Oyunu · v0.2 Greybox Prototip
+# 🎣 Sakin Koy — Balık Tutma Oyunu · v0.3 Greybox Prototip
+
+## v0.3 farkları — Joystick + Mekânsal Dünya
+- **Joystick ile tekne sürme** (sol başparmak; klavyede ←/→ veya A/D). İki parmak
+  aynı anda çalışır: sol el tekne, sağ el kanca (pointerId ile ayrışır).
+- **Yatay dünya (4600px):** solda iskele + "SAKİN KOY" tabelası; sağa açıldıkça
+  **dip derinleşir** (26m → ~1100m). Şamandıralar 80/250/600/1000m'yi işaretler.
+- **Hareketin amacı var:** nadir tür = uzağa git + uzun misina. Balıklar yerel dip
+  derinliğine göre doğar; kanca dibe çarpınca kum bulutu + otomatik sarma.
+- **Yükseltmeler alt-sheet'e taşındı** (⬆️ YÜKSELT butonu; alınabilir yükseltme
+  varken turuncu rozet). HUD minimalizmi (§11.2) korunur.
+- Tekne fiziği: ivme/sürtünme, hızla yatma (tilt), köpük izi partikülleri.
 
 ## v0.2 farkları
 - **Farklılaştırılmış balıklar:** 11 ayrı silüet (sprat, çipura, ton, orfoz,
