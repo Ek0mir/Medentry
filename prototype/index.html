@@ -190,14 +190,14 @@
     <div class="card">
       <p class="tag">Hybrid-Casual Idle Fishing · Greybox Prototip</p>
       <h1>🎣 SAKİN <span class="em">KOY</span></h1>
-      <p class="ver">v0.3 · core loop testi · sanat yok</p>
+      <p class="ver">v0.4 · core loop testi · sanat yok</p>
       <p class="story">Dedenin teknesi yıllardır koyda bağlı duruyordu.<br>
         Geriye bir tek onun eski <b>balık defteri</b> kaldı — yarısı boş.<br>
         Bugün ipi sen çözüyorsun: defteri doldur, koyu yeniden canlandır.</p>
       <button id="startBtn">OLTAYI ÇÖZ</button>
       <div class="how">
         🕹️ <b>joystick</b> ile tekneyi sür — açık deniz derinleşir, <b>şamandıraları</b> izle<br>
-        <b>AT</b> ile oltayı bırak · kancayı <b>sürükleyerek</b> yönlendir · <b>SAR</b> ile çek<br>
+        <b>AT</b> ile oltayı ileri <b>fırlat</b> · kancayı <b>sürükleyerek</b> yönlendir · <b>SAR</b> ile çek<br>
         her yeni tür <b>deftere</b> işlenir · altınla <b>yükseltme</b> al (⬆️)
       </div>
     </div>
@@ -290,6 +290,10 @@ const state = {
   hook:{ x:0, y:0, targetX:0, deepest:0 },
   cam:{ x:0, y:0 },
   boat:{ x:save.boatX, vx:0 },
+  bobber:{ x:0, y:0, vx:0, vy:0, active:false },   // fırlatılan şamandıra (mermi fiziği)
+  castT:0,                                          // windup/throw zamanlayıcı
+  rodTip:{ x:0, y:0 },                              // olta ucu (dünya koord — misina başlangıcı)
+  wind:0,                                           // yavaş değişen rüzgâr (-1..1)
   joyX:0, keyX:0,
   shake:0, timeScale:1, flash:0, running:false, muted:save.muted,
   best:save.best||0, sessionGold:0,
@@ -335,7 +339,9 @@ function beep(freq, dur, type="sine", vol=0.14, slideTo=null){
   g.gain.exponentialRampToValueAtTime(0.0001, ac.currentTime+dur);
   o.connect(g); g.connect(ac.destination); o.start(); o.stop(ac.currentTime+dur);
 }
-function sfxCast(){ beep(320,0.18,"triangle",0.12,120); }
+function sfxCast(){ beep(300,0.14,"triangle",0.09,180); }             // yay gerilir
+function sfxWhip(){ beep(680,0.09,"sawtooth",0.09,140); }             // kol savurma "vuu"
+function sfxSplash(){ beep(180,0.12,"sine",0.11,90); setTimeout(()=>beep(120,0.14,"triangle",0.07,70),40); } // suya düşüş
 function sfxCatch(r){ const base=280+r*90; beep(base,0.09,"square",0.1,base*1.5); }
 function sfxGold(){ beep(880,0.06,"sine",0.09,1320); setTimeout(()=>beep(1320,0.08,"sine",0.08),60); }
 function sfxRare(){ [0,90,180,300].forEach((t,i)=>setTimeout(()=>beep(523*(1+i*0.26),0.16,"triangle",0.13),t)); }
@@ -436,19 +442,52 @@ function updKeyX(){
             -(heldKeys.has("ArrowLeft") ||heldKeys.has("KeyA")?1:0);
 }
 
-/* ------------------------------------------------------------------ CAST / REEL */
+/* ------------------------------------------------------------------ CAST / REEL
+   Fırlatma fiziği: windup (geri al) → throw (savur) → şamandıra havada yay çizer
+   → suya düşer → sıçrama → misina gerilir → drop (bekleme/iniş).              */
 const castBtn=document.getElementById("castBtn");
+const WINDUP_DUR=0.36, CAST_G=680;     // yerçekimi (px/s²)
 function doCast(){
-  if(state.phase!=="idle") { if(state.phase==="drop") beginReel(); return; }
-  actx();
-  state.phase="drop";
-  state.hook.x = state.boat.x+16; state.hook.targetX = state.hook.x; state.hook.y=0; state.hook.deepest=0;
-  state.caught=[];
-  castBtn.classList.add("reel"); castBtn.firstChild.textContent="SAR";
-  castBtn.querySelector(".sub").textContent="makarayı sar";
-  splash(state.hook.x, 6, 12);
-  sfxCast();
-  hideHint();
+  if(state.phase==="idle"){
+    actx();
+    state.phase="windup"; state.castT=0;
+    state.caught=[];
+    angler.excite=0;
+    castBtn.classList.add("reel"); castBtn.firstChild.textContent="SAR";
+    castBtn.querySelector(".sub").textContent="makarayı sar";
+    sfxCast();                            // yaydan "vınn"
+    hideHint();
+  } else if(state.phase==="drop"){ beginReel(); }
+  // windup/throw sırasında tekrar basış yok sayılır (havadaki şamandıra sarılamaz)
+}
+/* windup + throw fiziğini yürüt */
+function updateCast(dt){
+  const b=state.bobber;
+  if(state.phase==="windup"){
+    state.castT+=dt;
+    if(state.castT>=WINDUP_DUR){                    // geri alma bitti → savurmaya geç
+      state.phase="cast"; state.castT=0; b.active=false;
+      angler.throwPulse=1; sfxWhip();               // kol öne savrulur
+    }
+  } else if(state.phase==="cast"){
+    state.castT+=dt;
+    if(!b.active && state.castT>=0.07) launchBobber(); // whip apex → şamandırayı bırak
+    if(b.active){
+      b.vy += CAST_G*dt; b.vx += state.wind*8*dt;   // yerçekimi + rüzgâr sürüklemesi
+      b.x += b.vx*dt; b.y += b.vy*dt;
+      if(b.y>=0 && b.vy>0){                          // suya düştü → sıçrama, misina gerilir
+        b.y=0; b.active=false;
+        state.hook.x=b.x; state.hook.targetX=b.x; state.hook.y=0; state.hook.deepest=0;
+        splash(b.x, 0, 16); shake(3.2); sfxSplash();
+        state.phase="drop";
+      }
+    }
+  }
+}
+function launchBobber(){
+  const b=state.bobber, tip=state.rodTip, dir=1;    // tekne +x'e bakar
+  b.x=tip.x; b.y=tip.y; b.active=true;
+  b.vx=rnd(255,300)*dir; b.vy=-rnd(235,265);        // ileri + yukarı → havada yay
 }
 function beginReel(){ if(state.phase==="drop"){ state.phase="reel"; } }
 function finishReel(){
@@ -515,8 +554,10 @@ function tick(now){
   if(state.running){
     ensureFish();
     updateBoat(dt);
+    updateCast(dt);           // windup/throw fiziği
     updateFish(sdt);
     updateHook(dt);           // kanca girişten bağımsız akıcı
+    updateAngler(dt);         // balıkçı iskeleti + olta ucu (misina başlangıcı)
     updateCam(dt);
     updateFx(sdt);
     spawnBubbles(sdt);
@@ -588,6 +629,7 @@ function tryCatch(){
       const col=RARITY[f.def.r].col;
       burst(f.x,f.y,col, f.def.r>=4?26:12);
       shake(f.def.r>=4?9:3.5);
+      angler.excite=Math.min(1, 0.6 + f.def.r*0.12);   // balıkçı heyecanlanır (nadirlikle artar)
       sfxCatch(f.def.r);
       if(f.def.r>=4){ bigFlash(); }
       if(state.caught.length>=cap) return;
@@ -617,9 +659,14 @@ function updateBoat(dt){
 
 function updateCam(dt){
   const surf = -H*0.32;   // idle/başlangıç: yüzey ekranın ~1/3'ünde, üstte gökyüzü
-  const target = state.phase==="idle" ? surf : Math.max(surf, state.hook.y - H*0.42);
+  const deep = (state.phase==="drop"||state.phase==="reel");
+  const target = deep ? Math.max(surf, state.hook.y - H*0.42) : surf;
   state.cam.y = lerp(state.cam.y, target, 1-Math.pow(0.002,dt));
-  const fx = state.phase==="idle" ? state.boat.x : state.hook.x;
+  let fx;
+  if(state.phase==="idle") fx=state.boat.x;
+  else if(state.phase==="windup") fx=state.boat.x+40;    // savurmaya hazırlanırken ileriye bak
+  else if(state.phase==="cast") fx=state.bobber.x;       // şamandırayı takip et
+  else fx=state.hook.x;
   const tx = clamp(fx - W*0.5, 0, WORLD_W - W);
   state.cam.x = lerp(state.cam.x, tx, 1-Math.pow(0.004,dt));
 }
@@ -781,7 +828,7 @@ function drawSurface(camX,camY){
     ctx.quadraticCurveTo(-112,20,-130,0); ctx.closePath(); ctx.fill();
     ctx.fillStyle="#734f34"; ctx.fillRect(-130,-5,260,5);                   // güverte kenarı
     ctx.restore();
-    drawFisherman(bx-14, sy-12, state.phase, performance.now()*0.001);
+    drawFisherman(bx-14, sy-12);
   }
   // su yüzey çizgisi (dünya fazlı — kayarken akar)
   ctx.strokeStyle="rgba(255,255,255,.35)"; ctx.lineWidth=2; ctx.beginPath();
@@ -790,34 +837,147 @@ function drawSurface(camX,camY){
   ctx.stroke();
 }
 
-/* Balıkçı — sırtı dönük, yüzsüz (§11.3: oyuncu kendini onunla özdeşleştirir).
-   Nefes/dalga salınımı; sarma sırasında geriye yaslanıp oltayı yukarı çeker. */
-function drawFisherman(cx, gy, phase, t){
-  const bob=Math.sin(t*1.4)*1.3, reel=(phase==="reel"), drop=(phase==="drop");
-  const skin="#c69a70", cap="#245268", capB="#16323f", coat="#c96a3a", coatD="#9c4c26", pant="#2c3e4a";
-  ctx.save(); ctx.translate(cx, gy+bob); ctx.rotate(reel?-0.13:0);
-  // bacak / oturuş
-  ctx.fillStyle=pant; ctx.beginPath(); ctx.ellipse(3,7,13,6,0,0,6.28); ctx.fill();
-  // gövde (mont)
-  ctx.fillStyle=coat; ctx.beginPath();
-  ctx.moveTo(-9,5); ctx.quadraticCurveTo(-12,-15,-3,-20);
-  ctx.quadraticCurveTo(8,-23,11,-15); ctx.quadraticCurveTo(13,-2,9,5); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle=coatD; ctx.lineWidth=1.4; ctx.beginPath(); ctx.moveTo(0,-19); ctx.lineTo(0,4); ctx.stroke(); // sırt dikişi
-  // boyun + kafa (yüzsüz)
-  ctx.fillStyle=skin; ctx.beginPath(); ctx.arc(1,-24,6.6,0,6.28); ctx.fill();
-  // kasket
-  ctx.fillStyle=cap; ctx.beginPath(); ctx.arc(1,-25,7.4,Math.PI*0.98,Math.PI*2.04); ctx.fill();
-  ctx.fillStyle=capB; ctx.fillRect(-7,-25.6,4.5,2.4);
-  // kol + olta (öne/yukarı uzanır)
-  const armY=reel?-17:-12;
-  ctx.strokeStyle=coatD; ctx.lineWidth=4.6; ctx.lineCap="round";
-  ctx.beginPath(); ctx.moveTo(4,-13); ctx.quadraticCurveTo(10,armY,15,armY); ctx.stroke();
-  const rodTipX=reel?28:34, rodTipY=reel?-46:-33;
-  ctx.strokeStyle="#37271a"; ctx.lineWidth=2.5;
-  ctx.beginPath(); ctx.moveTo(14,armY); ctx.quadraticCurveTo(24,armY-9, rodTipX, rodTipY); ctx.stroke();
-  // makara topuzu
-  ctx.fillStyle="#d7a13a"; ctx.beginPath(); ctx.arc(16,armY+2,2.4,0,6.28); ctx.fill();
+/* ==================== BALIKÇI RIG (procedural skeletal) ====================
+   Tek karakter, iskeletsel ileri-kinematik. Pose parametreleri hedefe yumuşak
+   blend edilir → animasyonlar arası geçiş yumuşak. Üstüne prosedürel katmanlar
+   (nefes, tekne uyumu, kafa çevirme, rüzgâr, makara çevirme) eklenir.
+   Sırtı dönük, yüzsüz (§11.3).                                               */
+const angler = {
+  recline:0, reach:-0.5, elbow:0.55, rodAngle:-0.62, rodBend:0.05,
+  head:0, headTarget:0.1, headTimer:1.4,
+  crank:0, crankAmt:0, breath:0, sway:0,
+  excite:0, throwPulse:0, strain:0, t:0
+};
+const ANG = { skin:"#c69a70", cap:"#245268", capB:"#16323f",
+              coat:"#c96a3a", coatD:"#9c4c26", coatL:"#d67f52", pant:"#2c3e4a", rod:"#37271a" };
+
+function updateAngler(dt){
+  const a=angler; a.t+=dt; const t=a.t, ph=state.phase;
+  state.wind = 0.55*Math.sin(t*0.13) + 0.35*Math.sin(t*0.31+1.3);   // yavaş rüzgâr
+
+  // --- faz bazlı hedef pose ---
+  let tRecline=0, tReach=-0.5, tElbow=0.55, tRod=-0.62, tBend=0.05, tCrank=0, faceFwd=false;
+  if(ph==="idle"){
+    tRod=-0.62 + Math.sin(t*1.05)*0.06;          // oltayı elde hafif sallama
+    tBend=0.04;
+  } else if(ph==="windup"){
+    const k=clamp(state.castT/WINDUP_DUR,0,1);    // geriye alma
+    tRod=lerp(-0.72,-2.35,k); tRecline=-0.05-0.13*k; tReach=lerp(-0.5,-1.55,k);
+    tElbow=1.05; tBend=0.02; faceFwd=true;
+  } else if(ph==="cast"){
+    tRod=0.55; tRecline=0.17; tReach=0.08; tElbow=0.12; tBend=0.03; faceFwd=true;  // ileri savruk
+  } else if(ph==="drop"){
+    tRod=-0.2; tRecline=0.05; tReach=-0.28; tElbow=0.5; tBend=0.15; faceFwd=true;  // suya bakış, misina gergin
+  } else if(ph==="reel"){
+    const big = state.caught.some(f=>f.def.r>=4) || state.caught.length>=capacity();
+    a.strain = lerp(a.strain, big?1:(state.caught.length?0.45:0), 1-Math.pow(0.02,dt));
+    tRecline=0.20 + a.strain*0.24;                // geriye yaslan (büyük balıkta daha çok)
+    tRod=-0.35 - a.strain*0.18; tBend=0.24 + a.strain*0.20;   // olta bükülür
+    tReach=-0.24; tElbow=0.5; tCrank=1; faceFwd=true;
+  }
+  if(ph!=="reel") a.strain = lerp(a.strain,0,1-Math.pow(0.05,dt));
+
+  // --- yumuşak blend (throw hızlı snap, windup orta, diğerleri yumuşak) ---
+  const base=(ph==="cast")?0.0006:(ph==="windup")?0.02:0.05;
+  const s=1-Math.pow(base,dt);
+  a.recline =lerp(a.recline, tRecline,s);
+  a.reach   =lerp(a.reach,   tReach,  s);
+  a.elbow   =lerp(a.elbow,   tElbow,  s);
+  a.rodAngle=lerp(a.rodAngle,tRod,    s);
+  a.rodBend =lerp(a.rodBend, tBend,   s);
+  a.crankAmt=lerp(a.crankAmt,tCrank,  1-Math.pow(0.05,dt));
+
+  // --- prosedürel katmanlar ---
+  a.breath=Math.sin(t*1.5);                                            // nefes alma
+  a.sway  =clamp(state.boat.vx*0.0009,-0.12,0.12)*0.6 + Math.sin(t*0.8)*0.028; // tekne salınımına uyum
+  if(faceFwd){ a.headTarget=0.12; }                                     // aksiyonda öne bak
+  else { a.headTimer-=dt; if(a.headTimer<=0){ a.headTarget=rnd(-0.55,0.55); a.headTimer=rnd(1.9,3.8); } } // idle: başını sağa sola çevir
+  a.head=lerp(a.head,a.headTarget,1-Math.pow(0.02,dt));
+  if(a.crankAmt>0.05) a.crank += 13*(1-a.strain*0.5)*dt;                // makarayı çevirme (zorlanınca yavaş)
+  a.excite    =lerp(a.excite,0,1-Math.pow(0.08,dt));
+  a.throwPulse=lerp(a.throwPulse,0,1-Math.pow(0.02,dt));
+
+  // --- olta ucu (misina başlangıcı, dünya koord) — draw ile aynı FK ---
+  const g=anglerGeom();
+  const ax=state.boat.x-14, ay=-12+a.breath*0.8;
+  state.rodTip.x=ax+g.rodTip.x; state.rodTip.y=ay+g.rodTip.y;
+}
+
+/* İleri kinematik: pose → eklem noktaları (yerel; +x ileri/sağ, origin=kalça) */
+function rot(x,y,r){ const c=Math.cos(r),s=Math.sin(r); return {x:x*c-y*s, y:x*s+y*c}; }
+function anglerGeom(){
+  const a=angler;
+  const bodyRot=a.sway + a.recline + a.throwPulse*0.15;
+  const shoulder=rot(2,-20,bodyRot);
+  const reach=17, ra=bodyRot+a.reach;
+  const rodHand={x:shoulder.x+Math.cos(ra)*reach, y:shoulder.y+Math.sin(ra)*reach};
+  const elbow={x:shoulder.x+Math.cos(ra-a.elbow*0.6)*reach*0.55, y:shoulder.y+Math.sin(ra-a.elbow*0.6)*reach*0.55};
+  const rodLen=46, rda=bodyRot+a.rodAngle, nrm={x:-Math.sin(rda),y:Math.cos(rda)}, bend=a.rodBend;
+  const rodTip={x:rodHand.x+Math.cos(rda)*rodLen+nrm.x*rodLen*bend, y:rodHand.y+Math.sin(rda)*rodLen+nrm.y*rodLen*bend};
+  const rodCtrl={x:rodHand.x+Math.cos(rda)*rodLen*0.5+nrm.x*rodLen*bend*0.55, y:rodHand.y+Math.sin(rda)*rodLen*0.5+nrm.y*rodLen*bend*0.55};
+  return {bodyRot, shoulder, elbow, rodHand, rodTip, rodCtrl};
+}
+
+function strokeLimb(p0,p1,p2,col,w){
+  ctx.strokeStyle=col; ctx.lineWidth=w; ctx.lineCap="round"; ctx.lineJoin="round";
+  ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.lineTo(p2.x,p2.y); ctx.stroke();
+}
+
+function drawFisherman(cx, gy){
+  const a=angler, g=anglerGeom();
+  const trem = a.strain>0.3 ? (Math.random()*2-1)*a.strain*1.4 : 0;   // büyük balık titremesi
+  ctx.save(); ctx.translate(cx+trem, gy + a.breath*0.8 - a.excite*2);
+
+  // oturuş / kucak (yalnız hafif salınım)
+  ctx.save(); ctx.rotate(a.sway*0.6);
+  ctx.fillStyle=ANG.pant; ctx.beginPath(); ctx.ellipse(3,7,13,6,0,0,6.28); ctx.fill();
   ctx.restore();
+
+  // ARKA kol (makara çeviren) — gövdenin arkasında, koyu
+  const reelPos={x:g.rodHand.x-3, y:g.rodHand.y+4};
+  const crankHand={x:reelPos.x+Math.cos(a.crank)*3.4*a.crankAmt, y:reelPos.y+Math.sin(a.crank)*3.4*a.crankAmt};
+  const backElbow={x:(g.shoulder.x+crankHand.x)/2+2, y:(g.shoulder.y+crankHand.y)/2+5};
+  strokeLimb(g.shoulder, backElbow, crankHand, ANG.coatD, 4.4);
+
+  // GÖVDE + kafa (sway+recline döndürülmüş çerçeve)
+  ctx.save(); ctx.rotate(g.bodyRot);
+    // mont — sırt kenarı rüzgârda dalgalanır
+    const flap=state.wind*3 + Math.sin(a.t*6)*1.1;
+    ctx.fillStyle=ANG.coat; ctx.beginPath();
+    ctx.moveTo(-9,6);
+    ctx.quadraticCurveTo(-12-flap,-14, -3,-20);
+    ctx.quadraticCurveTo(8,-23, 11,-14);
+    ctx.quadraticCurveTo(13,-2, 9,6); ctx.closePath(); ctx.fill();
+    // mont eteği flaması (rüzgâr)
+    ctx.fillStyle=ANG.coatD; ctx.beginPath();
+    ctx.moveTo(-8,4); ctx.quadraticCurveTo(-11-flap*1.4,9, -5,10); ctx.lineTo(-6,4); ctx.closePath(); ctx.fill();
+    // omuz vurgusu (ışık) + sırt dikişi
+    ctx.strokeStyle=ANG.coatD; ctx.lineWidth=1.3; ctx.beginPath(); ctx.moveTo(0,-19); ctx.lineTo(0,5); ctx.stroke();
+    // boyun + kafa (yüzsüz; yaw = yatay kayma)
+    const yaw=a.head;
+    ctx.fillStyle=ANG.skin; ctx.beginPath(); ctx.arc(2+yaw*2.6,-24,6.6,0,6.28); ctx.fill();
+    // kasket
+    ctx.fillStyle=ANG.cap; ctx.beginPath(); ctx.arc(2+yaw*2.6,-25,7.4,Math.PI*0.98,Math.PI*2.06); ctx.fill();
+    ctx.fillStyle=ANG.capB; ctx.beginPath(); ctx.arc(2+yaw*2.6-6.5,-25,2.6,0,6.28); ctx.fill(); // arka askı
+  ctx.restore();
+
+  // ÖN kol + olta (FK noktaları arasında)
+  strokeLimb(g.shoulder, g.elbow, g.rodHand, ANG.coatL, 4.8);
+  // olta çubuğu (bükülmüş)
+  ctx.strokeStyle=ANG.rod; ctx.lineWidth=2.6; ctx.lineCap="round";
+  ctx.beginPath(); ctx.moveTo(g.rodHand.x,g.rodHand.y);
+  ctx.quadraticCurveTo(g.rodCtrl.x,g.rodCtrl.y, g.rodTip.x,g.rodTip.y); ctx.stroke();
+  // makara + çevik el
+  ctx.fillStyle="#d7a13a"; ctx.beginPath(); ctx.arc(reelPos.x,reelPos.y,2.6,0,6.28); ctx.fill();
+  ctx.fillStyle=ANG.skin; ctx.beginPath(); ctx.arc(crankHand.x,crankHand.y,2.2,0,6.28); ctx.fill();
+  ctx.fillStyle=ANG.skin; ctx.beginPath(); ctx.arc(g.rodHand.x,g.rodHand.y,2.4,0,6.28); ctx.fill();
+
+  ctx.restore();
+}
+function drawBobber(x,y){
+  ctx.fillStyle="#ff6b5c"; ctx.beginPath(); ctx.arc(x,y-1.5,4.6,Math.PI,0); ctx.fill();
+  ctx.fillStyle="#f2f6f8"; ctx.beginPath(); ctx.arc(x,y+1.5,4.6,0,Math.PI); ctx.fill();
+  ctx.strokeStyle="#0c1e2c"; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x-4.6,y); ctx.lineTo(x+4.6,y); ctx.stroke();
 }
 
 /* Her türe kendi silüeti (§11.3: "her balık siyah siluetken tanınmalı").
@@ -927,18 +1087,29 @@ function drawFish(f, camY, caught){
 }
 
 function drawLine(camY){
-  const h=state.hook; if(state.phase==="idle") return;
-  const camX=state.cam.x;
-  const topX=state.boat.x+12-camX, topY=-camY-44;  // olta ucundan
-  const hx=h.x-camX, hy=h.y-camY;
+  const camX=state.cam.x, ph=state.phase;
+  if(ph==="idle"||ph==="windup") return;               // henüz misina dışarıda değil
+  const tipX=state.rodTip.x-camX, tipY=state.rodTip.y-camY;
+
+  if(ph==="cast"){                                       // misina havadaki şamandıraya
+    const bx=state.bobber.x-camX, by=state.bobber.y-camY;
+    ctx.strokeStyle="rgba(230,245,250,.45)"; ctx.lineWidth=1.4;
+    ctx.beginPath(); ctx.moveTo(tipX,tipY); ctx.lineTo(bx,by); ctx.stroke();
+    drawBobber(bx,by);
+    return;
+  }
+  // drop / reel — gergin misina rod ucundan kancaya
+  const h=state.hook, hx=h.x-camX, hy=h.y-camY;
+  const sag = ph==="reel" ? 2 : 7;                       // gerilim: reel'de daha düz
   ctx.strokeStyle="rgba(230,245,250,.5)"; ctx.lineWidth=1.6;
-  ctx.beginPath(); ctx.moveTo(topX, topY);
-  ctx.quadraticCurveTo((topX+hx)/2 + (state.phase==="reel"?0:6), (topY+hy)/2, hx, hy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(tipX,tipY);
+  ctx.quadraticCurveTo((tipX+hx)/2, (tipY+hy)/2 + sag, hx, hy); ctx.stroke();
+  // suya giriş noktasında minik şamandıra (misina yüzeyi kestiği yer)
+  if(hy>0 && tipY<0){ const tt=(0-tipY)/(hy-tipY); drawBobber(tipX+(hx-tipX)*tt, 0.5); }
   // kanca
   ctx.save(); ctx.translate(hx,hy);
   ctx.strokeStyle="#e8f4f8"; ctx.lineWidth=2.4; ctx.beginPath();
   ctx.arc(0,4,5,Math.PI*0.1,Math.PI*1.5); ctx.stroke();
-  // yakalama halkası (yeşil feedback §2.1)
   const full=state.caught.length>=capacity();
   ctx.strokeStyle=full?"#ff6b6b":"rgba(90,230,160,.8)"; ctx.lineWidth=2;
   ctx.beginPath(); ctx.arc(0,0,17,0,6.28); ctx.stroke();
@@ -1031,7 +1202,7 @@ document.getElementById("startBtn").addEventListener("click",()=>{
   state.running=true; refreshHUD();
   ensureFish();
   setTimeout(()=>showHint("🕹️ Joystick ile tekneyi sür — şamandıralar derin suları işaretler",4200),700);
-  setTimeout(()=>{ if(state.dex.size<3) showHint("AT ile oltayı bırak, kancayı sürükleyerek balıklara değ",3800); },6400);
+  setTimeout(()=>{ if(state.dex.size<3) showHint("AT'a bas → olta ileri fırlar; sonra kancayı sürükleyip balıklara değ",3800); },6400);
   setTimeout(()=>{ if(state.dex.size<5) showHint("Açık denizde dip derinleşir → daha nadir türler 🐟",3600); },14000);
   actx();
 });

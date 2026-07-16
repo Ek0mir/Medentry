@@ -1,4 +1,15 @@
-# 🎣 Sakin Koy — Balık Tutma Oyunu · v0.3 Greybox Prototip
+# 🎣 Sakin Koy — Balık Tutma Oyunu · v0.4 Greybox Prototip
+
+## v0.4 farkları — Animasyonlu Balıkçı + Fırlatma Fiziği
+- **İskeletsel balıkçı rig'i** (procedural, ileri kinematik). Pose parametreleri
+  hedefe yumuşak blend edilir → animasyonlar arası geçiş yumuşak. Katmanlar:
+  - Idle: nefes alma, teknenin salınımına kısmi uyum, başını sağa-sola çevirme, oltayı elde sallama, rüzgârda mont/etek dalgalanması
+  - Yakalama: heyecan darbesi (nadirlikle artar), geriye yaslanma, makara çevirme (el orbit), omuz/gövde hareketi, misina gerilmesi, **büyük balıkta titreme + derin yaslanma + yavaş makara**
+- **Fırlatma fiziği** ("aşağı bırakma" kaldırıldı): windup (geri al) → savurma →
+  şamandıra **havada mermi yayı** çizer (yerçekimi + rüzgâr) → suya düşer →
+  sıçrama efekti → misina gerilir → drop (bekleme/iniş). Şamandıra rod ucundan
+  fırlatılır; misina rod ucundan takip eder. Kanca suya düştüğü yerden iner.
+- Yeni sesler: yay gerilme, kol savurma (whip), suya düşüş (splash).
 
 ## v0.3 farkları — Joystick + Mekânsal Dünya
 - **Joystick ile tekne sürme** (sol başparmak; klavyede ←/→ veya A/D). İki parmak
