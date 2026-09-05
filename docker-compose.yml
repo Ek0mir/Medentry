@@ -1,0 +1,55 @@
+# MİRFİX Operasyon Katmanı — mini PC üzerinde tek komutla kurulum:
+#   cp .env.example .env && docker compose up -d
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: mirfix-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mirfix}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mirfix}
+      POSTGRES_DB: ${POSTGRES_DB:-mirfix}
+      TZ: ${TZ:-Europe/Istanbul}
+    volumes:
+      - mirfix-veri:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mirfix} -d ${POSTGRES_DB:-mirfix}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Yalnızca yerel makineden erişilsin; panele LAN'dan app üzerinden gelinir.
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  app:
+    build: .
+    container_name: mirfix-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Europe/Istanbul}
+      PORT: 8080
+      DATABASE_URL: postgres://${POSTGRES_USER:-mirfix}:${POSTGRES_PASSWORD:-mirfix}@db:5432/${POSTGRES_DB:-mirfix}
+      OTURUM_SIRRI: ${OTURUM_SIRRI:?OTURUM_SIRRI .env dosyasinda tanimlanmali}
+      MIKRO_ADAPTER: ${MIKRO_ADAPTER:-seed}
+      MIKRO_CSV_DIZIN: /veri/mikro-export
+      MIKRO_MSSQL_SUNUCU: ${MIKRO_MSSQL_SUNUCU:-}
+      MIKRO_MSSQL_PORT: ${MIKRO_MSSQL_PORT:-1433}
+      MIKRO_MSSQL_VERITABANI: ${MIKRO_MSSQL_VERITABANI:-}
+      MIKRO_MSSQL_KULLANICI: ${MIKRO_MSSQL_KULLANICI:-}
+      MIKRO_MSSQL_PAROLA: ${MIKRO_MSSQL_PAROLA:-}
+      MIKRO_MSSQL_SIFRELI: ${MIKRO_MSSQL_SIFRELI:-false}
+      ISLER_ACIK: ${ISLER_ACIK:-1}
+      YEDEK_DIZIN: /yedek
+    volumes:
+      - ./veri/mikro-export:/veri/mikro-export:ro
+      - mirfix-yedek:/yedek
+    ports:
+      - "8080:8080"
+
+volumes:
+  mirfix-veri:
+  mirfix-yedek:

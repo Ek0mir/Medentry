@@ -30,3 +30,17 @@
 *.exe
 *.out
 *.app
+
+# --- MİRFİX Operasyon Katmanı ---
+node_modules/
+dist/
+build/
+.env
+.env.local
+*.log
+npm-debug.log*
+coverage/
+yedek/
+veri/mikro-export/*
+!veri/mikro-export/.gitkeep
+.DS_Store
