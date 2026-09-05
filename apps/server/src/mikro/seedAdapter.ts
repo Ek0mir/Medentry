@@ -53,7 +53,10 @@ const BANKALAR = [
   'Ziraat Bankası', 'İş Bankası', 'Garanti BBVA', 'Yapı Kredi', 'Akbank',
   'Halkbank', 'VakıfBank', 'QNB', 'DenizBank', 'TEB',
 ];
-const TEMSILCILER = ['Ferhat Yılmaz', 'Enes Demir'];
+// Panel kullanıcılarıyla aynı adlar: demo kurulumunda temsilci süzgeci
+// ek ayar gerektirmeden çalışsın. Gerçek Mikro'da adlar farklı olacağı için
+// eşleme op_kullanici.mikro_temsilci alanından yapılır.
+const TEMSILCILER = ['Ferhat Bey', 'Enes'];
 
 /**
  * Cari profilleri. Dağılım kasıtlı: çoğunluk sağlıklı, azınlık sorunlu —
