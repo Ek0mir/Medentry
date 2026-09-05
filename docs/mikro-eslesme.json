@@ -1,0 +1,115 @@
+{
+  "_aciklama": [
+    "Mikro alan eşlemesi — Faz 0 çıktısı.",
+    "",
+    "SOLDAKİ anahtarlar bu sistemin normalize alan adlarıdır ve DEĞİŞMEZ.",
+    "SAĞDAKİ değerler Mikro'daki gerçek kolon/tablo adlarıdır ve Faz 0'daki",
+    "tablo keşfinden sonra doldurulur. Aşağıdakiler PLACEHOLDER'dır —",
+    "hiçbiri doğrulanmış Mikro şeması değildir, TEYIT_EDILECEK ile işaretlidir.",
+    "",
+    "Neden burada: Mikro sürüm güncellemesi tablo yapısını bozarsa (Bölüm 14,",
+    "orta seviye risk) düzeltilecek tek yer bu dosyadır, kod değil."
+  ],
+
+  "csv": {
+    "_aciklama": "Mikro'dan alınan export dosyaları. Ayırıcı 'auto' ise ilk satırdan bulunur (Türkçe Excel ';' verir).",
+    "ayirici": "auto",
+    "kumeler": {
+      "cari": {
+        "dosya": "cari.csv",
+        "alanlar": {
+          "kod": "TEYIT_EDILECEK_cari_kod",
+          "unvan": "TEYIT_EDILECEK_unvan",
+          "telefon": "TEYIT_EDILECEK_telefon",
+          "eposta": "TEYIT_EDILECEK_eposta",
+          "temsilci": "TEYIT_EDILECEK_temsilci",
+          "riskLimiti": "TEYIT_EDILECEK_risk_limiti",
+          "vadeGun": "TEYIT_EDILECEK_vade_gun",
+          "il": "TEYIT_EDILECEK_il",
+          "aktif": "TEYIT_EDILECEK_aktif"
+        }
+      },
+      "fatura": {
+        "dosya": "fatura.csv",
+        "alanlar": {
+          "faturaNo": "TEYIT_EDILECEK_fatura_no",
+          "cariKod": "TEYIT_EDILECEK_cari_kod",
+          "tarih": "TEYIT_EDILECEK_fatura_tarihi",
+          "vade": "TEYIT_EDILECEK_vade_tarihi",
+          "tutar": "TEYIT_EDILECEK_tutar",
+          "kalan": "TEYIT_EDILECEK_kalan",
+          "paraBirimi": "TEYIT_EDILECEK_para_birimi",
+          "tip": "TEYIT_EDILECEK_evrak_tipi"
+        }
+      },
+      "tahsilat": {
+        "dosya": "tahsilat.csv",
+        "alanlar": {
+          "kaynakNo": "TEYIT_EDILECEK_evrak_no",
+          "cariKod": "TEYIT_EDILECEK_cari_kod",
+          "tarih": "TEYIT_EDILECEK_tarih",
+          "tutar": "TEYIT_EDILECEK_tutar",
+          "tip": "TEYIT_EDILECEK_odeme_tipi"
+        }
+      },
+      "cek": {
+        "dosya": "cek.csv",
+        "alanlar": {
+          "cekNo": "TEYIT_EDILECEK_cek_no",
+          "cariKod": "TEYIT_EDILECEK_cari_kod",
+          "vade": "TEYIT_EDILECEK_vade",
+          "tutar": "TEYIT_EDILECEK_tutar",
+          "kesideci": "TEYIT_EDILECEK_kesideci",
+          "banka": "TEYIT_EDILECEK_banka",
+          "durum": "TEYIT_EDILECEK_durum"
+        }
+      },
+      "odemeGecmisi": {
+        "dosya": "odeme-gecmisi.csv",
+        "alanlar": {
+          "cariKod": "TEYIT_EDILECEK_cari_kod",
+          "ortalamaGecikmeGun": "TEYIT_EDILECEK_ort_gecikme",
+          "odenenFaturaAdedi": "TEYIT_EDILECEK_odenen_adet",
+          "gecikmeliAdet": "TEYIT_EDILECEK_gecikmeli_adet",
+          "pencereAy": "TEYIT_EDILECEK_pencere_ay"
+        }
+      },
+      "karsiliksiz": {
+        "dosya": "karsiliksiz.csv",
+        "alanlar": {
+          "cariKod": "TEYIT_EDILECEK_cari_kod",
+          "adet": "TEYIT_EDILECEK_adet",
+          "tutar": "TEYIT_EDILECEK_tutar",
+          "sonTarih": "TEYIT_EDILECEK_son_tarih"
+        }
+      },
+      "ciro": {
+        "dosya": "ciro.csv",
+        "alanlar": {
+          "cariKod": "TEYIT_EDILECEK_cari_kod",
+          "son90Gun": "TEYIT_EDILECEK_son_90",
+          "onceki90Gun": "TEYIT_EDILECEK_onceki_90"
+        }
+      }
+    }
+  },
+
+  "mssql": {
+    "_aciklama": [
+      "Salt-okunur SELECT sorguları. Kolonlar normalize adlarımıza TAKMA ADLA döndürülmeli:",
+      "  SELECT cari_kodu AS kod, cari_unvan1 AS unvan, ... FROM ...",
+      "{gunGeriye} yer tutucusu tahsilat sorgusunda gün sayısıyla değiştirilir.",
+      "Mümkünse doğrudan tabloya değil, Mikro tarafında açılacak bir VIEW'a bağlanın:",
+      "sürüm güncellemesinde kırılma view katmanında soğurulur."
+    ],
+    "kumeler": {
+      "cari":         { "sorgu": "-- TEYIT_EDILECEK\nSELECT NULL AS kod, NULL AS unvan, NULL AS telefon, NULL AS eposta, NULL AS temsilci, 0 AS riskLimiti, 0 AS vadeGun, NULL AS il, 1 AS aktif WHERE 1=0" },
+      "fatura":       { "sorgu": "-- TEYIT_EDILECEK\nSELECT NULL AS faturaNo, NULL AS cariKod, NULL AS tarih, NULL AS vade, 0 AS tutar, 0 AS kalan, 'TRY' AS paraBirimi, 'SATIS' AS tip WHERE 1=0" },
+      "tahsilat":     { "sorgu": "-- TEYIT_EDILECEK — son {gunGeriye} gün\nSELECT NULL AS kaynakNo, NULL AS cariKod, NULL AS tarih, 0 AS tutar, 'HAVALE' AS tip WHERE 1=0" },
+      "cek":          { "sorgu": "-- TEYIT_EDILECEK\nSELECT NULL AS cekNo, NULL AS cariKod, NULL AS vade, 0 AS tutar, NULL AS kesideci, NULL AS banka, 'PORTFOYDE' AS durum WHERE 1=0" },
+      "odemeGecmisi": { "sorgu": "-- TEYIT_EDILECEK\nSELECT NULL AS cariKod, 0 AS ortalamaGecikmeGun, 0 AS odenenFaturaAdedi, 0 AS gecikmeliAdet, 24 AS pencereAy WHERE 1=0" },
+      "karsiliksiz":  { "sorgu": "-- TEYIT_EDILECEK\nSELECT NULL AS cariKod, 0 AS adet, 0 AS tutar, NULL AS sonTarih WHERE 1=0" },
+      "ciro":         { "sorgu": "-- TEYIT_EDILECEK\nSELECT NULL AS cariKod, 0 AS son90Gun, 0 AS onceki90Gun WHERE 1=0" }
+    }
+  }
+}
