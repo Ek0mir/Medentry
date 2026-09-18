@@ -4,8 +4,9 @@
  */
 
 import type { FastifyInstance } from 'fastify';
+import { privacyZonesFor } from '@medentry/domain';
 import { ASSET_TYPE_LABELS } from '@medentry/shared';
-import type { AssetType } from '@medentry/shared';
+import type { AssetType, Geofence } from '@medentry/shared';
 import { HttpError, currentUser, requireAuth, requireRole, requestMeta } from '../auth/context.js';
 import { query, queryOne } from '../db/pool.js';
 import { guardAccess } from '../kvkk/guard.js';
@@ -143,21 +144,42 @@ export async function fleetRoutes(app: FastifyInstance): Promise<void> {
       [id, user.companyId, from, to, parseLimit(q['limit'], 2000, 20_000)],
     );
 
-    // Mahremiyet bolgelerinde konum maskelenir.
-    const privacyZones = await query<{ center_lat: number; center_lon: number; radius_m: number }>(
-      `SELECT center_lat, center_lon, radius_m FROM geofences
-        WHERE company_id = $1 AND purpose = 'privacy_zone' AND is_active AND kind = 'circle'`,
+    // Mahremiyet bolgelerinde konum maskelenir (daire ve poligon).
+    const zoneRows = await query<{
+      id: string;
+      name: string;
+      kind: string;
+      center_lat: number | null;
+      center_lon: number | null;
+      radius_m: number | null;
+      polygon: Array<{ lat: number; lon: number }> | null;
+    }>(
+      `SELECT id, name, kind, center_lat, center_lon, radius_m, polygon
+         FROM geofences
+        WHERE company_id = $1 AND purpose = 'privacy_zone' AND is_active`,
       [user.companyId],
     );
+
+    const privacyZones: Geofence[] = zoneRows.map((row) => {
+      const fence: Geofence = {
+        id: row.id,
+        name: row.name,
+        kind: row.kind as Geofence['kind'],
+        purpose: 'privacy_zone',
+        active: true,
+      };
+      if (row.center_lat !== null && row.center_lon !== null) {
+        fence.center = { lat: row.center_lat, lon: row.center_lon };
+      }
+      if (row.radius_m !== null) fence.radiusM = row.radius_m;
+      if (row.polygon) fence.polygon = row.polygon;
+      return fence;
+    });
 
     const coarse = guard.decision.obligations.includes('coarse_location_only');
     const points = rows
       .map((row) => {
-        const inZone = privacyZones.some(
-          (z) =>
-            z.center_lat !== null &&
-            haversine(row.lat, row.lon, z.center_lat, z.center_lon) <= (z.radius_m ?? 0),
-        );
+        const inZone = privacyZonesFor({ lat: row.lat, lon: row.lon }, privacyZones).length > 0;
         if (inZone) return null; // mahremiyet bolgesi: nokta hic gonderilmez
         return {
           ts: row.ts,
@@ -631,13 +653,3 @@ export async function fleetRoutes(app: FastifyInstance): Promise<void> {
   });
 }
 
-/** Basit haversine - konum maskelemede kullanilir. */
-function haversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6_371_008.8;
-  const toRad = (d: number): number => (d * Math.PI) / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLon = toRad(lon2 - lon1);
-  const a =
-    Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
-  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
-}

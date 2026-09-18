@@ -18,7 +18,7 @@ konu olur.
 
 **Kural:** Kabin kamerası, operatörün telefon ekranını veya kişisel eşyalarını
 çerçeveleyecek şekilde konumlandırılamaz. Montaj sonrası açı, operatör
-huzurunda kontrol edilir ve `montaj-tutanagi` ile imza altına alınır.
+huzurunda kontrol edilir ve [`montaj-tutanagi.md`](montaj-tutanagi.md) ile imza altına alınır.
 
 ## 2. Ses
 

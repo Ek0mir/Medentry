@@ -38,7 +38,7 @@ bilerek şu şekilde kurgulanmıştır:
 | 4 | Kabin kamerası için etki değerlendirmesi | KVKK irtibat kişisi | `etki-degerlendirmesi.md` |
 | 5 | Personel bilgilendirme toplantısı + ıslak imzalı tutanak | İK | `personel-bilgilendirme-tutanagi.md` |
 | 6 | İş sözleşmesi / yönetmelik ekinin tebliği | İK | `is-sozlesmesi-eki.md` |
-| 7 | Araçlara bilgilendirme etiketlerinin yapıştırılması | Saha | `kamera-politikasi.md` §5 |
+| 7 | Kamera montajı, açı kontrolü ve bilgilendirme etiketleri | Saha | `montaj-tutanagi.md`, `kamera-politikasi.md` §5 |
 | 8 | Saklama ve imha politikasının sisteme girilmesi | KVKK irtibat kişisi | `saklama-imha-politikasi.md` |
 | 9 | Yazılımda rol atamaları ve mahremiyet pencerelerinin tanımlanması | Yönetici | — |
 | 10 | Başvuru kanalının (e-posta/KEP) açılması ve duyurulması | KVKK irtibat kişisi | `ilgili-kisi-basvuru-formu.md` |

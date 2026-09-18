@@ -278,4 +278,35 @@ suite('telemetri -> oturum -> hakedis', () => {
     expect(body.masked).toBeGreaterThanOrEqual(1);
     expect(body.points.some((p) => Math.abs(p.lat - 40.96) < 0.001)).toBe(false);
   });
+
+  it('poligon seklindeki mahremiyet bolgesi de maskelenir', async () => {
+    const { pool } = await import('../src/db/pool.js');
+    await pool.query(
+      `INSERT INTO geofences (company_id, name, kind, purpose, polygon)
+       SELECT id, 'Test mahremiyet poligonu', 'polygon', 'privacy_zone', $1 FROM companies LIMIT 1`,
+      [
+        JSON.stringify([
+          { lat: 41.2, lon: 29.3 },
+          { lat: 41.2, lon: 29.32 },
+          { lat: 41.22, lon: 29.32 },
+          { lat: 41.22, lon: 29.3 },
+        ]),
+      ],
+    );
+    await pool.query(
+      `INSERT INTO positions (company_id, asset_id, ts, lat, lon, gps_valid, speed_kph)
+       SELECT company_id, id, $1, 41.21, 29.31, true, 0 FROM assets WHERE id = $2`,
+      [at(1, 21, 0), assetId],
+    );
+
+    const response = await ctx.app.inject({
+      method: 'GET',
+      url: `/api/assets/${assetId}/positions?from=${at(2, 0, 0).toISOString()}&to=${new Date().toISOString()}`,
+      headers: auth(ctx.tokens['manager']!),
+    });
+
+    const body = response.json() as { points: Array<{ lat: number }>; masked: number };
+    expect(body.points.some((p) => Math.abs(p.lat - 41.21) < 0.001)).toBe(false);
+    expect(body.masked).toBeGreaterThanOrEqual(2);
+  });
 });

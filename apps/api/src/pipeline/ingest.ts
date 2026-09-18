@@ -325,7 +325,16 @@ async function openSession(ctx: DeviceContext, ts: Date, record: NormalizedRecor
       record.fuelLevelPct ?? null,
     ],
   );
-  return row?.id ?? null;
+  if (row) return row.id;
+
+  // Catisma: veritabaninda zaten acik bir oturum var ama canli durum tablosu
+  // bunu bilmiyor (or. asset_state sifirlanmis). Mevcut oturumu sahipleniyoruz;
+  // aksi halde oturum kapanmadan asili kalir ve calisma saati sismeye devam eder.
+  const existing = await queryOne<{ id: string }>(
+    `SELECT id FROM work_sessions WHERE asset_id = $1 AND is_open ORDER BY started_at DESC LIMIT 1`,
+    [ctx.assetId],
+  );
+  return existing?.id ?? null;
 }
 
 /** Oturumu kapatir ve sure/rolanti/mesafe ozetini hesaplar. */
