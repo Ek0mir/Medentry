@@ -18,11 +18,14 @@ import { mediaRoutes } from './routes/media.js';
 
 export async function buildServer(): Promise<FastifyInstance> {
   const app = Fastify({
-    logger: {
-      level: config.isProduction ? 'info' : 'debug',
-      // Kisisel veri iceren basliklar loglanmaz.
-      redact: ['req.headers.authorization', 'req.headers["x-ingest-key"]'],
-    },
+    logger:
+      config.env === 'test'
+        ? false
+        : {
+            level: config.isProduction ? 'info' : 'debug',
+            // Kisisel veri iceren basliklar loglanmaz.
+            redact: ['req.headers.authorization', 'req.headers["x-ingest-key"]'],
+          },
     trustProxy: true,
     bodyLimit: 4 * 1024 * 1024,
   });

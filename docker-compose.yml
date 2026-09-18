@@ -1,0 +1,64 @@
+# Gelistirme ortami.
+# Uretimde veritabani yonetilen bir servis veya ayri bir sunucu olmalidir.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: medentry-postgres
+    environment:
+      POSTGRES_USER: medentry
+      POSTGRES_PASSWORD: medentry
+      POSTGRES_DB: medentry
+      # Turkce siralama ve gun siniri icin
+      TZ: Europe/Istanbul
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - medentry-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U medentry -d medentry']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    profiles: ['full']
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ['node', '--import', 'tsx', 'apps/api/src/server.ts']
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://medentry:medentry@postgres:5432/medentry
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET tanimlanmali}
+      INGEST_KEY: ${INGEST_KEY:?INGEST_KEY tanimlanmali}
+      MEDIA_PROVIDER: ${MEDIA_PROVIDER:-mock}
+      MEDIA_COMMAND_ENDPOINT: http://ingest:8081/command
+    ports:
+      - '8080:8080'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  ingest:
+    profiles: ['full']
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ['node', '--import', 'tsx', 'apps/ingest/src/index.ts']
+    environment:
+      NODE_ENV: production
+      API_URL: http://api:8080
+      INGEST_KEY: ${INGEST_KEY:?INGEST_KEY tanimlanmali}
+    ports:
+      # Cihaz portlari
+      - '5023:5023' # GT06
+      - '5027:5027' # Teltonika
+      - '7611:7611' # JT/T 808
+      # Komut kanali yalnizca ic agda acik olmalidir
+      - '127.0.0.1:8081:8081'
+    depends_on:
+      - api
+
+volumes:
+  medentry-pgdata:

@@ -31,12 +31,17 @@ async function readNotice(file: string, fallbackTitle: string): Promise<{ title:
   }
 }
 
+/** Testlerde ciktiyi susturur. */
+const log = (...args: unknown[]): void => {
+  if (process.env['NODE_ENV'] !== 'test') console.log(...args);
+};
+
 export async function seed(): Promise<void> {
   await migrate();
 
   const existing = await queryOne<{ id: string }>(`SELECT id FROM companies LIMIT 1`);
   if (existing) {
-    console.log('[seed] veri zaten mevcut, atlaniyor. Sifirlamak icin: npm run db:reset');
+    log('[seed] veri zaten mevcut, atlaniyor. Sifirlamak icin: npm run db:reset');
     return;
   }
 
@@ -244,15 +249,15 @@ export async function seed(): Promise<void> {
     [companyId],
   );
 
-  console.log('[seed] tamamlandi');
-  console.log('[seed] ---------------------------------------------');
-  console.log('[seed] Giris bilgileri (tum kullanicilar ayni parola):');
-  console.log(`[seed]   parola: ${DEMO_PASSWORD}`);
+  log('[seed] tamamlandi');
+  log('[seed] ---------------------------------------------');
+  log('[seed] Giris bilgileri (tum kullanicilar ayni parola):');
+  log(`[seed]   parola: ${DEMO_PASSWORD}`);
   for (const user of users) {
-    console.log(`[seed]   ${user.role.padEnd(11)} ${user.email}`);
+    log(`[seed]   ${user.role.padEnd(11)} ${user.email}`);
   }
-  console.log('[seed] ---------------------------------------------');
-  console.log('[seed] Simulatoru baslatmak icin: npm run simulate');
+  log('[seed] ---------------------------------------------');
+  log('[seed] Simulatoru baslatmak icin: npm run simulate');
 }
 
 const isDirectRun = process.argv[1]?.includes('seed');

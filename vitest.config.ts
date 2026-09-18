@@ -15,5 +15,10 @@ export default defineConfig({
     include: ['packages/**/test/**/*.test.ts', 'apps/**/test/**/*.test.ts'],
     environment: 'node',
     globals: false,
+    setupFiles: ['./apps/api/test/setup.ts'],
+    // API testleri ayni veritabanini paylasir; paralel calistirilamaz.
+    fileParallelism: false,
+    testTimeout: 30_000,
+    hookTimeout: 90_000,
   },
 });

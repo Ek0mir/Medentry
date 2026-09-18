@@ -37,14 +37,14 @@ export async function migrate(): Promise<string[]> {
         await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [file]);
         await client.query('COMMIT');
         applied.push(file);
-        console.log(`[migrate] uygulandi: ${file}`);
+        if (process.env['NODE_ENV'] !== 'test') console.log(`[migrate] uygulandi: ${file}`);
       } catch (error) {
         await client.query('ROLLBACK');
         throw new Error(`Gec basarisiz (${file}): ${error instanceof Error ? error.message : error}`);
       }
     }
 
-    if (applied.length === 0) console.log('[migrate] sema guncel');
+    if (applied.length === 0 && process.env['NODE_ENV'] !== 'test') console.log('[migrate] sema guncel');
     return applied;
   } finally {
     client.release();
