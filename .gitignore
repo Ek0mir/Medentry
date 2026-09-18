@@ -1,32 +1,33 @@
-# Prerequisites
-*.d
+# Bagimliliklar
+node_modules/
+.pnp
+.pnp.js
 
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
+# Derleme ciktilari
+dist/
+build/
+*.tsbuildinfo
+coverage/
 
-# Precompiled Headers
-*.gch
-*.pch
+# Ortam degiskenleri - SIR ICERIR, ASLA COMMIT EDILMEZ
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
 
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
+# Kayit/medya dosyalari (kamera klipleri) - depoda tutulmaz
+media/
+storage/
+uploads/
 
-# Fortran module files
-*.mod
-*.smod
+# Gunlukler
+logs/
+*.log
+npm-debug.log*
 
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.exe
-*.out
-*.app
+# Editor / isletim sistemi
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

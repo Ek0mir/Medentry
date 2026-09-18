@@ -1,0 +1,32 @@
+{
+  "name": "medentry-filo",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Makine ve arac takip platformu - GPS/4G telemetri, kamera, calisma saati, geofence, yakit ve gunluk hakedis",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.10"
+  },
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "tsc -b tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "npm run migrate -w @medentry/api",
+    "db:seed": "npm run seed -w @medentry/api",
+    "dev:api": "npm run dev -w @medentry/api",
+    "dev:ingest": "npm run dev -w @medentry/ingest",
+    "dev:web": "npm run dev -w @medentry/web",
+    "simulate": "npm run start -w @medentry/simulator"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
