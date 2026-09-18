@@ -1,0 +1,20 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@medentry/shared": ["packages/shared/src/index.ts"],
+      "@medentry/domain": ["packages/domain/src/index.ts"],
+      "@medentry/protocols": ["packages/protocols/src/index.ts"]
+    }
+  },
+  "include": [
+    "packages/*/src/**/*.ts",
+    "packages/*/test/**/*.ts",
+    "apps/api/src/**/*.ts",
+    "apps/api/test/**/*.ts",
+    "apps/ingest/src/**/*.ts",
+    "apps/simulator/src/**/*.ts",
+    "vitest.config.ts"
+  ]
+}

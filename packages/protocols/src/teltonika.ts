@@ -271,11 +271,11 @@ export class TeltonikaDecoder implements ProtocolDecoder {
       const def = this.ioMap[Number(idText)];
       if (!def) continue;
       if (def.boolean) {
-        (record as Record<string, unknown>)[def.field] = rawValue !== 0;
+        (record as unknown as Record<string, unknown>)[def.field] = rawValue !== 0;
         continue;
       }
       const value = def.scale ? Math.round(rawValue * def.scale * 1000) / 1000 : rawValue;
-      (record as Record<string, unknown>)[def.field] = value;
+      (record as unknown as Record<string, unknown>)[def.field] = value;
     }
   }
 }

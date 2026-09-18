@@ -263,9 +263,13 @@ function parseLocation(body: Buffer, session: DecoderSession): NormalizedRecord 
     satellites: gps.satellites,
     raw: { hex: body.toString('hex') },
   };
-  // GT06N konum paketinin sonunda ACC baytı bulunabilir (uzunluga gore).
-  if (body.length >= 31) {
-    const acc = body.readUInt8(body.length - 5);
+  // GT06N (0x22) konum paketinde GPS blogundan (18 bayt) ve LBS blogundan
+  // (MCC 2 + MNC 1 + LAC 2 + CellID 3 = 8 bayt) sonra ACC baytı gelir.
+  // Kisa 0x12 paketlerinde bu alan yoktur; kontak durumu durum (0x13)
+  // paketinden okunur.
+  const ACC_OFFSET = 26;
+  if (body.length > ACC_OFFSET) {
+    const acc = body.readUInt8(ACC_OFFSET);
     if (acc === 0x00 || acc === 0x01) record.ignition = acc === 0x01;
   }
   return record;

@@ -53,7 +53,7 @@ export function normalizeGeneric(payload: GenericPayload): NormalizedRecord {
 
   for (const [field, keys] of Object.entries(NUMBER_KEYS)) {
     const value = num(payload, keys);
-    if (value !== undefined) (record as Record<string, unknown>)[field] = value;
+    if (value !== undefined) (record as unknown as Record<string, unknown>)[field] = value;
   }
 
   const ignition = bool(payload, ['ignition', 'acc', 'kontak']);

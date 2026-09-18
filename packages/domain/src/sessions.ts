@@ -202,6 +202,101 @@ function mergeCloseRuns(runs: readonly Run[], opts: SessionOptions): Run[] {
   return out;
 }
 
+/** Tek adimda kabul edilen en buyuk mesafe; ustu GPS sicramasi sayilir. */
+const MAX_STEP_M = 2000;
+/** Duran araclarda gercek hareket sayilmasi icin gereken en kucuk yer degistirme. */
+const DRIFT_RADIUS_M = 15;
+/** Bu hizin altindaki kayitlar "duruyor" kabul edilir. */
+const DRIFT_SPEED_KPH = 2;
+
+/**
+ * Bir kayit dizisinde kat edilen mesafe.
+ *
+ * Iki gurultu kaynagi elenir:
+ *  - **GPS sicramasi:** tek adimda kilometrelerce atlama.
+ *  - **Duran makinede GPS sapmasi:** is makinesi saatlerce ayni yerde calisir.
+ *    Her kayitta birkac metrelik sapma toplanirsa gunun sonunda olmayan
+ *    kilometreler cikar. Bunu onlemek icin arac dururken adim adim toplama
+ *    yerine **capa (anchor) yontemi** kullanilir: konum, son capadan
+ *    `DRIFT_RADIUS_M` kadar uzaklasmadikca mesafe islenmez. Sapma capanin
+ *    etrafinda salindigi icin hicbir zaman esigi asmaz; gercek hareket ise
+ *    esigi asar ve capayi tasir.
+ */
+export function travelledDistanceMeters(samples: readonly SessionSample[]): number {
+  const first = samples[0];
+  if (!first || !isValidFix(first)) {
+    return samples.length > 1 ? travelledDistanceMeters(samples.slice(1)) : 0;
+  }
+
+  let distanceM = 0;
+  let prevFix: LatLon = { lat: first.lat, lon: first.lon };
+  let anchor: LatLon = prevFix;
+  let prevSpeed = first.speedKph;
+
+  for (let i = 1; i < samples.length; i += 1) {
+    const s = samples[i]!;
+    if (!isValidFix(s)) continue;
+    const fix = { lat: s.lat, lon: s.lon };
+    const moving = prevSpeed > DRIFT_SPEED_KPH || s.speedKph > DRIFT_SPEED_KPH;
+
+    if (moving) {
+      const step = haversineMeters(prevFix, fix);
+      if (step < MAX_STEP_M) distanceM += step;
+      anchor = fix;
+    } else {
+      const fromAnchor = haversineMeters(anchor, fix);
+      if (fromAnchor >= DRIFT_RADIUS_M && fromAnchor < MAX_STEP_M) {
+        distanceM += fromAnchor;
+        anchor = fix;
+      }
+    }
+
+    prevFix = fix;
+    prevSpeed = s.speedKph;
+  }
+  return distanceM;
+}
+
+export interface WindowSummary {
+  durationSec: number;
+  idleSec: number;
+  workingSec: number;
+  distanceM: number;
+  idlePeriods: IdlePeriod[];
+}
+
+/**
+ * Bilinen bir zaman araligi (or. veritabaninda acik duran bir oturum) icin
+ * sure/rolanti/mesafe ozetini cikarir. Oturum sinirlari disaridan verildigi
+ * icin kontak gecislerini yeniden aramaz.
+ */
+export function summarizeWindow(
+  samples: readonly SessionSample[],
+  startedAt: Date,
+  endedAt: Date,
+  idleOptions: Partial<IdleOptions> = {},
+): WindowSummary {
+  const idle = { ...DEFAULT_SESSION_OPTIONS.idle, ...idleOptions };
+  const inWindow = [...samples]
+    .filter((s) => s.ts >= startedAt && s.ts <= endedAt)
+    .sort((a, b) => a.ts.getTime() - b.ts.getTime());
+
+  const durationSec = Math.max(0, (endedAt.getTime() - startedAt.getTime()) / 1000);
+  const idlePeriods = collectIdlePeriods(inWindow, endedAt, idle);
+  const idleSec = Math.min(
+    durationSec,
+    idlePeriods.reduce((sum, p) => sum + p.durationSec, 0),
+  );
+
+  return {
+    durationSec,
+    idleSec,
+    workingSec: Math.max(0, durationSec - idleSec),
+    distanceM: Math.round(travelledDistanceMeters(inWindow)),
+    idlePeriods,
+  };
+}
+
 function buildSession(
   run: Run,
   opts: SessionOptions,
@@ -216,20 +311,7 @@ function buildSession(
   const open = run.closedAt === null;
   const durationSec = Math.max(0, (endedAt.getTime() - startedAt.getTime()) / 1000);
 
-  let distanceM = 0;
-  let prevFix: LatLon | null = isValidFix(first) ? { lat: first.lat, lon: first.lon } : null;
-  for (let i = 1; i < samples.length; i += 1) {
-    const s = samples[i]!;
-    if (!isValidFix(s)) continue;
-    const fix = { lat: s.lat, lon: s.lon };
-    if (prevFix) {
-      const step = haversineMeters(prevFix, fix);
-      // 2 km'den buyuk tek adimlar GPS sicramasidir, mesafeye katilmaz.
-      if (step < 2000) distanceM += step;
-    }
-    prevFix = fix;
-  }
-
+  const distanceM = travelledDistanceMeters(samples);
   const idlePeriods = collectIdlePeriods(samples, endedAt, opts.idle);
   const idleSec = idlePeriods.reduce((sum, p) => sum + p.durationSec, 0);
 

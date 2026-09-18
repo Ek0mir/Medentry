@@ -173,6 +173,44 @@ describe('calisma oturumu motoru', () => {
     expect(sessions[0]?.distanceM).toBeLessThan(3000);
   });
 
+  it('duran makinedeki GPS sapmasini mesafeye eklemez', () => {
+    // Ekskavator 2 saat ayni yerde calisiyor; her kayitta birkac metre
+    // sapma var. Bu sapma kilometreye donusmemeli.
+    const samples: SessionSample[] = [];
+    for (let m = 0; m < 120; m += 1) {
+      samples.push(
+        sample({
+          minute: m,
+          ignition: true,
+          rpm: 1600,
+          speedKph: 0,
+          // ~+/-3 m GPS sapmasi (duran alicida tipik)
+          lat: 41.0 + (m % 2 === 0 ? 0.00003 : -0.00003),
+          lon: 29.0 + (m % 3 === 0 ? 0.00003 : -0.00003),
+        }),
+      );
+    }
+    samples.push(sample({ minute: 120, ignition: false }));
+
+    const { sessions } = buildWorkSessions(samples);
+
+    expect(sessions[0]?.durationSec).toBe(7200);
+    expect(sessions[0]?.distanceM).toBe(0);
+  });
+
+  it('gercek hareketi sapma filtresine takilmadan sayar', () => {
+    const samples: SessionSample[] = [];
+    for (let m = 0; m < 10; m += 1) {
+      // Dakikada ~0.011 derece = ~1.2 km, hiz 60 km/s
+      samples.push(sample({ minute: m, ignition: true, speedKph: 60, lat: 41.0 + m * 0.011, lon: 29.0 }));
+    }
+    samples.push(sample({ minute: 10, ignition: false, lat: 41.099, lon: 29.0 }));
+
+    const { sessions } = buildWorkSessions(samples);
+
+    expect(sessions[0]?.distanceM).toBeGreaterThan(9000);
+  });
+
   it('yakit seviyesi baslangic/bitisini oturuma yazar', () => {
     const samples = [
       sample({ minute: 0, ignition: true, rpm: 1500, fuelPct: 90 }),

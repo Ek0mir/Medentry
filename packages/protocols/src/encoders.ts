@@ -41,6 +41,13 @@ export interface Gt06LocationInput {
   headingDeg: number;
   satellites?: number;
   gpsValid?: boolean;
+  /**
+   * Verildiginde GT06N (0x22) genis paketi uretilir: GPS + LBS + ACC.
+   * Boylece kontak durumu zaman damgasiyla birlikte tasinir; kisa 0x12
+   * paketinde kontak bilgisi yoktur.
+   */
+  ignition?: boolean;
+  odometerM?: number;
 }
 
 function gt06GpsBlock(input: Gt06LocationInput): Buffer {
@@ -67,7 +74,25 @@ function gt06GpsBlock(input: Gt06LocationInput): Buffer {
 }
 
 export function encodeGt06Location(input: Gt06LocationInput, serial = 2): Buffer {
-  return gt06Frame(GT06_PROTOCOL.LOCATION, gt06GpsBlock(input), serial);
+  const gps = gt06GpsBlock(input);
+  if (input.ignition === undefined) {
+    return gt06Frame(GT06_PROTOCOL.LOCATION, gps, serial);
+  }
+
+  // LBS blogu: MCC(2) + MNC(1) + LAC(2) + CellID(3)
+  const lbs = Buffer.alloc(8);
+  lbs.writeUInt16BE(286, 0); // Turkiye
+  lbs.writeUInt8(1, 2);
+  lbs.writeUInt16BE(0x2b1c, 3);
+  lbs.writeUIntBE(0x1a2b3c, 5, 3);
+
+  const tail = Buffer.alloc(7);
+  tail.writeUInt8(input.ignition ? 0x01 : 0x00, 0); // ACC
+  tail.writeUInt8(0x01, 1); // veri yukleme modu
+  tail.writeUInt8(0x00, 2); // gercek zamanli / yeniden gonderim
+  tail.writeUInt32BE(Math.max(0, Math.round(input.odometerM ?? 0)), 3);
+
+  return gt06Frame(GT06_PROTOCOL.GPS_LBS, Buffer.concat([gps, lbs, tail]), serial);
 }
 
 export function encodeGt06Status(

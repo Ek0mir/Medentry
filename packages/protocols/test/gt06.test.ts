@@ -79,6 +79,62 @@ describe('GT06 protokolu', () => {
     expect(record!.position!.lon).toBeCloseTo(-70.6693, 3);
   });
 
+  it('genis konum paketinde (0x22) kontak bilgisini zaman damgasiyla tasir', () => {
+    // Durum paketinde (0x13) zaman damgasi yoktur; gecmise donuk veri
+    // yuklerken kontak bilgisi bu genis pakette gelmelidir.
+    const decoder = new Gt06Decoder();
+    const session: DecoderSession = { deviceIdent: '1' };
+    const ts = new Date(Date.UTC(2026, 8, 17, 4, 30, 0));
+
+    const on = decoder.decode(
+      encodeGt06Location({
+        timestamp: ts,
+        lat: 40.91,
+        lon: 29.21,
+        speedKph: 0,
+        headingDeg: 0,
+        ignition: true,
+        odometerM: 48_250,
+      }),
+      session,
+    ).messages[0];
+
+    const off = decoder.decode(
+      encodeGt06Location({
+        timestamp: ts,
+        lat: 40.91,
+        lon: 29.21,
+        speedKph: 0,
+        headingDeg: 0,
+        ignition: false,
+      }),
+      session,
+    ).messages[0];
+
+    expect(on?.kind).toBe('position');
+    expect(on?.record?.ignition).toBe(true);
+    expect(on?.record?.timestamp.toISOString()).toBe(ts.toISOString());
+    expect(on?.record?.position?.lat).toBeCloseTo(40.91, 4);
+    expect(off?.record?.ignition).toBe(false);
+  });
+
+  it('kisa konum paketinde kontak alani bulunmaz', () => {
+    const decoder = new Gt06Decoder();
+    const session: DecoderSession = { deviceIdent: '1' };
+    const record = decoder.decode(
+      encodeGt06Location({
+        timestamp: new Date(Date.UTC(2026, 8, 17, 4, 30, 0)),
+        lat: 40.91,
+        lon: 29.21,
+        speedKph: 12,
+        headingDeg: 90,
+      }),
+      session,
+    ).messages[0]?.record;
+
+    expect(record?.ignition).toBeUndefined();
+  });
+
   it('durum paketinden kontak bilgisini okur', () => {
     const decoder = new Gt06Decoder();
     const session: DecoderSession = { deviceIdent: '1' };

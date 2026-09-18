@@ -8,14 +8,13 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-    "exactOptionalPropertyTypes": false,
+    "noUnusedLocals": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "composite": true
+    "verbatimModuleSyntax": true,
+    // Paketler kaynak koddan tuketilir (tsx / vite); derleme ciktisi uretilmez.
+    "noEmit": true
   }
 }

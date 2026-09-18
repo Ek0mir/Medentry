@@ -94,7 +94,7 @@ export function evaluateGeofences(
  * Bir konum dizisi icin tum gecisleri hesaplar (gecmise donuk yeniden hesap).
  */
 export function replayGeofences(
-  points: readonly Array<{ ts: Date; lat: number; lon: number }>,
+  points: ReadonlyArray<{ ts: Date; lat: number; lon: number }>,
   fences: readonly Geofence[],
   initial: GeofenceState = new Set<string>(),
 ): GeofenceEvaluation {
