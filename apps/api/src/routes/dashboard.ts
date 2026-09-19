@@ -30,6 +30,8 @@ interface DashboardRow {
   asset_type: string;
   plate: string | null;
   fuel_tank_liters: number | null;
+  nominal_consumption_lph: number | null;
+  tracker_count: number | null;
   project_name: string | null;
   last_ts: Date | null;
   lat: number | null;
@@ -62,6 +64,9 @@ interface DashboardRow {
 
 const DASHBOARD_SQL = `
   SELECT a.id, a.code, a.name, a.category, a.asset_type, a.plate, a.fuel_tank_liters,
+         a.nominal_consumption_lph,
+         (SELECT COUNT(*) FROM devices d
+           WHERE d.asset_id = a.id AND d.is_active AND d.kind = 'tracker') AS tracker_count,
          pr.name AS project_name,
          st.last_ts, st.lat, st.lon, st.speed_kph, st.heading_deg, st.ignition, st.movement,
          st.fuel_level_pct, st.engine_hours_sec, st.odometer_m, st.gsm_signal,
@@ -118,6 +123,8 @@ interface CameraRow {
   records_audio: boolean;
   event_only: boolean;
   sd_recording: boolean;
+  retrieval: string;
+  device_model: string | null;
 }
 
 export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
@@ -381,7 +388,10 @@ function toDashboardAsset(row: DashboardRow, input: DecorateInput) {
       usedLitersToday: row.fuel_used_liters ?? 0,
       engineHoursTotal: row.engine_hours_sec ? round2(row.engine_hours_sec / 3600) : null,
       odometerKm: row.odometer_m ? Math.round(row.odometer_m / 1000) : null,
+      nominalLitersPerHour: row.nominal_consumption_lph,
     },
+    /** Takip cihazi yoksa calisma saati elle girilir. */
+    hasTracker: Number(row.tracker_count ?? 0) > 0,
     /** Goruntu */
     cameras: input.cameras.map((camera) => {
       // Politika motoru arayuze "izlenebilir mi, izlenemezse neden" bilgisini
@@ -408,8 +418,16 @@ function toDashboardAsset(row: DashboardRow, input: DecorateInput) {
         recordsAudio: camera.records_audio,
         eventOnly: camera.event_only,
         sdRecording: camera.sd_recording,
-        liveAllowed: decision.allowed,
-        liveBlockedReason: decision.allowed ? null : decision.message,
+        retrieval: camera.retrieval,
+        deviceModel: camera.device_model,
+        // Bagimsiz kayit cihazindan platform uzerinden yayin alinmaz.
+        liveAllowed: camera.retrieval !== 'manual' && decision.allowed,
+        liveBlockedReason:
+          camera.retrieval === 'manual'
+            ? 'Bagimsiz kayit cihazi - goruntu SD karttan alinir'
+            : decision.allowed
+              ? null
+              : decision.message,
       };
     }),
     /** Gunluk hakedis */
@@ -440,7 +458,7 @@ async function companyTimezone(companyId: string): Promise<string> {
 async function loadCameras(companyId: string, assetId?: string): Promise<CameraRow[]> {
   return query<CameraRow>(
     `SELECT c.id, d.asset_id, c.channel_no, c.position, c.label, c.privacy_class,
-            c.records_audio, c.event_only, c.sd_recording
+            c.records_audio, c.event_only, c.sd_recording, c.retrieval, d.model AS device_model
        FROM device_cameras c
        JOIN devices d ON d.id = c.device_id
       WHERE c.company_id = $1 AND c.is_active AND d.asset_id IS NOT NULL

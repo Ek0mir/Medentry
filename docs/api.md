@@ -32,28 +32,39 @@ Hata yanıtları ortak biçimdedir:
 Her ikisi de KVKK denetiminden geçer (`operasyon_yonetimi` varsayılan amaç);
 denetim kaydı kullanıcı bazında birleştirilerek yazılır.
 
+## Ayarlar
+
+| Uç | Yetki | Açıklama |
+|----|-------|----------|
+| `GET /api/settings` | herkes | Firma ayarları (`solo_mode`, saat dilimi, para birimi) |
+| `PATCH /api/settings` | owner | `{soloMode}` — tek kullanıcı modu |
+
 ## Filo
 
-| Uç | Yetki |
-|----|-------|
-| `GET /api/assets` | herkes |
-| `POST /api/assets` | owner, manager |
-| `PATCH /api/assets/:id` | owner, manager |
-| `GET /api/assets/:id/positions?from=&to=&limit=` | herkes (mahremiyet maskelemesi uygulanır) |
-| `GET /api/assets/:id/sessions?from=&limit=` | herkes |
-| `GET /api/assets/:id/events?from=&severity=` | herkes |
-| `GET /api/assets/:id/geofence-events` | herkes |
-| `GET /api/assets/:id/fuel?from=` | herkes |
-| `POST /api/assets/:id/fuel-transactions` | owner, manager, site_chief |
-| `POST /api/events/:id/acknowledge` | herkes |
-| `GET/POST /api/devices` | owner, manager |
-| `POST /api/devices/:id/cameras` | owner, manager |
-| `GET/POST /api/geofences`, `DELETE /api/geofences/:id` | değişken |
-| `GET /api/operators` | herkes |
-| `POST /api/assignments` | owner, manager, site_chief |
-| `GET /api/assets/:id/assignments` | herkes |
-| `GET/POST /api/rate-cards` | owner, manager |
-| `GET/POST /api/projects` | değişken |
+| Uç | Yetki | Açıklama |
+|----|-------|----------|
+| `GET /api/assets` | herkes | |
+| `POST /api/assets` | owner, manager | |
+| `PATCH /api/assets/:id` | owner, manager | `{nominalConsumptionLph, hourMeterHours, idleStrategy, ...}` |
+| `GET /api/assets/:id/positions?from=&to=&limit=` | herkes | Mahremiyet maskelemesi uygulanır |
+| `GET /api/assets/:id/sessions?from=&limit=` | herkes | |
+| `GET /api/assets/:id/events?from=&severity=` | herkes | |
+| `GET /api/assets/:id/geofence-events` | herkes | |
+| `GET /api/assets/:id/fuel?from=` | herkes | Olaylar, fişler ve **tüketim özeti** (lt/saat, TL/saat) |
+| `POST /api/assets/:id/fuel-transactions` | owner, manager, site_chief | Yakıt fişi girişi |
+| `POST /api/assets/:id/sessions/start` | herkes | Elle vardiya başlat (cihaz yokken) |
+| `POST /api/assets/:id/sessions/stop` | herkes | Elle vardiya bitir, `{idleMinutes?}` |
+| `PATCH /api/devices/:id` | owner, manager | `{clockOffsetSec, model, utcOffsetMinutes, assetId}` |
+| `PATCH /api/cameras/:id` | owner, manager | `{retrieval: 'integrated'\|'manual', label, sdRecording}` |
+| `POST /api/events/:id/acknowledge` | herkes | |
+| `GET/POST /api/devices` | owner, manager | |
+| `POST /api/devices/:id/cameras` | owner, manager | `{retrieval}` ile bağımsız kayıt cihazı tanımlanır |
+| `GET/POST /api/geofences`, `DELETE /api/geofences/:id` | değişken | |
+| `GET /api/operators` | herkes | |
+| `POST /api/assignments` | owner, manager, site_chief | |
+| `GET /api/assets/:id/assignments` | herkes | |
+| `GET/POST /api/rate-cards` | owner, manager | |
+| `GET/POST /api/projects` | değişken | |
 
 **Konum maskelemesi:** `GET /api/assets/:id/positions` yanıtında
 `masked` alanı, mahremiyet bölgesi nedeniyle çıkarılan nokta sayısını verir;
@@ -70,10 +81,19 @@ denetim kaydı kullanıcı bazında birleştirilerek yazılır.
 | `GET /api/media/sd?cameraId=&from=&to=` | aynı | SD karttaki kayıt listesi |
 | `POST /api/media/clip` | aynı | Kaydı sunucuya çektirir |
 | `GET /api/media/requests` | herkes | Çekme taleplerinin durumu |
+| `GET /api/events/:id/clip-window?beforeSec=&afterSec=` | herkes | **Bağımsız kayıt cihazı:** olayın SD karttaki zaman aralığı, cihaz saat sapması uygulanmış |
+
+`retrieval: 'manual'` olan kameralarda `/api/media/live`, `/playback` ve `/sd`
+uçları **409 `MANUAL_RETRIEVAL`** döner: görüntü platform üzerinden akmaz.
 
 Kamera uçlarının tamamı: amaç kontrolü → rol kontrolü → aydınlatma teyidi →
 gerekçe (≥15 karakter) → mahremiyet penceresi → kabin kuralları → denetim kaydı
 → operatöre bildirim.
+
+**Tek kullanıcı modunda** (`solo_mode` açık ve ilgili kişi isteği yapanın
+kendisi) amaç ve rol kontrolleri ile denetim kaydı aynen sürer; aydınlatma
+teyidi, gerekçe, mahremiyet penceresi ve kabin kuralları uygulanmaz. Karar
+kodu `ALLOWED_SOLO` olarak kayda geçer.
 
 ## Hakediş
 

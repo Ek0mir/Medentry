@@ -11,20 +11,75 @@ import { useEffect, useState } from 'react';
 import { ApiError, api } from '../api.js';
 import type { AssetDetailDto, CameraDto, PurposeDto } from '../api.js';
 import { CameraDialog } from '../components/CameraDialog.js';
+import { ClipWindowDialog } from '../components/ClipWindowDialog.js';
 import { MapView } from '../components/MapView.js';
 import { eventLabel, formatAge, formatDateTime, formatHours, formatMoney, formatTime, STATUS_LABEL } from '../format.js';
 
 interface Props {
   assetId: string;
   purposes: PurposeDto[];
+  /** Tek kullanici modunda gerekce ve kabin kisitlari uygulanmaz. */
+  soloMode: boolean;
   onBack: () => void;
 }
 
-export function AssetScreen({ assetId, purposes, onBack }: Props): JSX.Element {
+export function AssetScreen({ assetId, purposes, soloMode, onBack }: Props): JSX.Element {
   const [data, setData] = useState<AssetDetailDto | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [camera, setCamera] = useState<CameraDto | null>(null);
+  const [clipEventId, setClipEventId] = useState<number | null>(null);
   const [showLines, setShowLines] = useState(false);
+  const [showFuelForm, setShowFuelForm] = useState(false);
+  const [fuelLiters, setFuelLiters] = useState('');
+  const [fuelPrice, setFuelPrice] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  async function refresh(): Promise<void> {
+    setData(await api.get<AssetDetailDto>(`/api/dashboard/${assetId}`));
+  }
+
+  /** Takip cihazi yokken calisma saatini elle baslatir/bitirir. */
+  async function toggleShift(running: boolean): Promise<void> {
+    setBusy(true);
+    setToast(null);
+    try {
+      const result = await api.post<{ hours?: number }>(
+        `/api/assets/${assetId}/sessions/${running ? 'stop' : 'start'}`,
+      );
+      setToast(running ? `Vardiya kapatildi: ${result.hours ?? 0} saat` : 'Vardiya baslatildi');
+      await refresh();
+    } catch (err) {
+      setToast(err instanceof ApiError ? err.message : 'Islem tamamlanamadi');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function addFuel(): Promise<void> {
+    const liters = Number(fuelLiters.replace(',', '.'));
+    if (!Number.isFinite(liters) || liters <= 0) {
+      setToast('Litre degeri gecerli olmalidir');
+      return;
+    }
+    setBusy(true);
+    try {
+      const unitPrice = Number(fuelPrice.replace(',', '.'));
+      await api.post(`/api/assets/${assetId}/fuel-transactions`, {
+        liters,
+        ...(Number.isFinite(unitPrice) && unitPrice > 0 ? { unitPrice } : {}),
+      });
+      setFuelLiters('');
+      setFuelPrice('');
+      setShowFuelForm(false);
+      setToast(`${liters} litre yakit girisi kaydedildi`);
+      await refresh();
+    } catch (err) {
+      setToast(err instanceof ApiError ? err.message : 'Yakit girisi kaydedilemedi');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -75,6 +130,8 @@ export function AssetScreen({ assetId, purposes, onBack }: Props): JSX.Element {
 
   return (
     <div className="content">
+      {toast && <div className="notice ok">{toast}</div>}
+
       {/* 1) Makine nerede */}
       <MapView
         tall
@@ -180,6 +237,24 @@ export function AssetScreen({ assetId, purposes, onBack }: Props): JSX.Element {
         )}
       </div>
 
+      {/* Takip cihazi yoksa calisma saati elle girilir */}
+      {!asset.hasTracker && (
+        <div className="card">
+          <h2>Vardiya (elle)</h2>
+          <div className="notice info">
+            Bu makinede takip cihazi tanimli degil. Calisma saatini elle baslatip bitirin;
+            hakedis bu sureden hesaplanir. Cihaz taktiginizda bu kart kendiliginden kaybolur.
+          </div>
+          <button
+            className={`btn block${asset.today.running ? '' : ' primary'}`}
+            disabled={busy}
+            onClick={() => void toggleShift(asset.today.running)}
+          >
+            {asset.today.running ? 'Vardiyayi bitir' : 'Vardiyayi baslat'}
+          </button>
+        </div>
+      )}
+
       {/* 4) Kim kullaniyor */}
       <div className="card">
         <h2>Kim kullaniyor</h2>
@@ -214,20 +289,33 @@ export function AssetScreen({ assetId, purposes, onBack }: Props): JSX.Element {
           <>
             <div className="camera-grid">
               {asset.cameras.map((cam) => {
+                const manual = cam.retrieval === 'manual';
                 const cabin = cam.position === 'cabin';
                 return (
                   <button
                     key={cam.id}
-                    className={`camera-tile${!cabin && !cam.liveAllowed ? ' blocked' : ''}`}
-                    onClick={() => setCamera(cam)}
+                    className={`camera-tile${manual || !cam.liveAllowed ? ' blocked' : ''}`}
+                    onClick={() => {
+                      // Bagimsiz kayit cihazinda izlenecek bir akis yok; yapilacak
+                      // is son olayin SD kart zaman araligini almaktir.
+                      if (manual) {
+                        const lastAlert = asset.alerts[0];
+                        if (lastAlert) setClipEventId(lastAlert.id);
+                        else setToast('Kayit cihazindan goruntu SD karttan alinir. Once bir olay secin.');
+                        return;
+                      }
+                      setCamera(cam);
+                    }}
                   >
                     <span className="name">{cam.positionLabel}</span>
                     <span className="hint">
-                      {cabin
-                        ? 'Olay bazli · canli izleme kapali'
-                        : cam.liveAllowed
-                          ? 'Canli izle'
-                          : (cam.liveBlockedReason ?? 'Su anda erisilemez')}
+                      {manual
+                        ? 'SD karttan alinir · son olayin saatini goster'
+                        : cabin
+                          ? 'Olay bazli · canli izleme kapali'
+                          : cam.liveAllowed
+                            ? 'Canli izle'
+                            : (cam.liveBlockedReason ?? 'Su anda erisilemez')}
                     </span>
                     <span className="row tiny muted">
                       {cam.sdRecording && <span>SD kayit</span>}
@@ -237,10 +325,17 @@ export function AssetScreen({ assetId, purposes, onBack }: Props): JSX.Element {
                 );
               })}
             </div>
-            <div className="notice info" style={{ marginTop: 10 }}>
-              Her goruntuleme amac ve gerekce ile kayit altina alinir, operatore bildirilir. Kabin
-              ici kamera canli izlenemez.
-            </div>
+            {asset.cameras.some((c) => c.retrieval === 'manual') ? (
+              <div className="notice info" style={{ marginTop: 10 }}>
+                Kayit cihazi platforma bagli degil: goruntu SD karttan alinir. Bir olaya
+                dokundugunuzda, kaydi cihazda hangi saat araliginda arayacaginizi gosterir.
+              </div>
+            ) : (
+              <div className="notice info" style={{ marginTop: 10 }}>
+                Her goruntuleme amac ve gerekce ile kayit altina alinir. Kabin ici kamera canli
+                izlenemez.
+              </div>
+            )}
           </>
         )}
       </div>
@@ -271,6 +366,49 @@ export function AssetScreen({ assetId, purposes, onBack }: Props): JSX.Element {
           <div className="card-row">
             <span className="label">Kilometre</span>
             <span className="value">{asset.fuel.odometerKm.toLocaleString('tr-TR')} km</span>
+          </div>
+        )}
+        {asset.fuel.levelPct === null && asset.fuel.nominalLitersPerHour !== null && (
+          <div className="tiny muted" style={{ marginTop: 6 }}>
+            Yakit sensoru yok: tuketim {asset.fuel.nominalLitersPerHour} lt/saat kabulüyle motor
+            saatinden tahmin ediliyor. Fis girdikce bu deger gercege yaklasir.
+          </div>
+        )}
+
+        {!showFuelForm ? (
+          <button className="btn ghost block" style={{ marginTop: 10 }} onClick={() => setShowFuelForm(true)}>
+            Yakit girisi ekle
+          </button>
+        ) : (
+          <div style={{ marginTop: 10 }}>
+            <div className="row">
+              <label className="field" style={{ flex: 1, marginBottom: 0 }}>
+                <span className="lab">Litre</span>
+                <input
+                  value={fuelLiters}
+                  onChange={(e) => setFuelLiters(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="or. 120"
+                />
+              </label>
+              <label className="field" style={{ flex: 1, marginBottom: 0 }}>
+                <span className="lab">Litre fiyati</span>
+                <input
+                  value={fuelPrice}
+                  onChange={(e) => setFuelPrice(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="or. 46,50"
+                />
+              </label>
+            </div>
+            <div className="row" style={{ marginTop: 10 }}>
+              <button className="btn" style={{ flex: 1 }} onClick={() => setShowFuelForm(false)}>
+                Vazgec
+              </button>
+              <button className="btn primary" style={{ flex: 1 }} disabled={busy} onClick={() => void addFuel()}>
+                Kaydet
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -336,15 +474,25 @@ export function AssetScreen({ assetId, purposes, onBack }: Props): JSX.Element {
         <div className="card">
           <h2>Uyarilar</h2>
           {asset.alerts.slice(0, 8).map((alert) => (
-            <div className="card-row" key={alert.id}>
+            <button
+              className="card-row"
+              key={alert.id}
+              onClick={() => setClipEventId(alert.id)}
+              style={{ width: '100%', background: 'none', border: 0, borderBottom: '1px solid rgba(37,52,83,0.55)', textAlign: 'left' }}
+            >
               <span className="label">
                 <span className={`pill ${alert.severity === 'critical' ? 'danger' : 'idle'}`}>
                   {eventLabel(alert.type)}
                 </span>
               </span>
-              <span className="value small muted">{formatDateTime(alert.ts, tz)}</span>
-            </div>
+              <span className="value small muted">
+                {formatDateTime(alert.ts, tz)} ›
+              </span>
+            </button>
           ))}
+          <div className="tiny muted" style={{ marginTop: 6 }}>
+            Bir olaya dokunun: kaydin cihazda hangi saat araliginda aranacagini gosterir.
+          </div>
         </div>
       )}
 
@@ -352,12 +500,16 @@ export function AssetScreen({ assetId, purposes, onBack }: Props): JSX.Element {
         Filo listesine don
       </button>
 
+      {clipEventId !== null && (
+        <ClipWindowDialog eventId={clipEventId} onClose={() => setClipEventId(null)} />
+      )}
+
       {camera && (
         <CameraDialog
-          assetId={asset.id}
           assetName={asset.name}
           camera={camera}
           purposes={purposes}
+          soloMode={soloMode}
           onClose={() => setCamera(null)}
         />
       )}

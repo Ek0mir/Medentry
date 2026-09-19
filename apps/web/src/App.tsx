@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ApiError, api, getToken, setToken } from './api.js';
-import type { DashboardDto, Me, PurposeDto } from './api.js';
+import type { DashboardDto, Me, PurposeDto, SettingsDto } from './api.js';
 import { AssetScreen } from './screens/AssetScreen.js';
 import { Billing } from './screens/Billing.js';
 import { Fleet } from './screens/Fleet.js';
@@ -16,6 +16,7 @@ export function App(): JSX.Element {
   const [authed, setAuthed] = useState(() => getToken() !== null);
   const [me, setMe] = useState<Me | null>(null);
   const [purposes, setPurposes] = useState<PurposeDto[]>([]);
+  const [settings, setSettings] = useState<SettingsDto | null>(null);
   const [dashboard, setDashboard] = useState<DashboardDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('fleet');
@@ -24,12 +25,14 @@ export function App(): JSX.Element {
 
   const loadMe = useCallback(async (): Promise<void> => {
     try {
-      const [profile, purposeList] = await Promise.all([
+      const [profile, purposeList, companySettings] = await Promise.all([
         api.get<Me>('/api/auth/me'),
         api.get<PurposeDto[]>('/api/kvkk/purposes'),
+        api.get<SettingsDto>('/api/settings').catch(() => null),
       ]);
       setMe(profile);
       setPurposes(purposeList);
+      setSettings(companySettings);
     } catch (err) {
       if (err instanceof ApiError && err.status === 401) {
         setAuthed(false);
@@ -88,7 +91,10 @@ export function App(): JSX.Element {
           ? 'KVKK'
           : (me?.company.name ?? 'Filo');
 
-  const pendingNotices = me?.pendingNotices.length ?? 0;
+  const soloMode = settings?.solo_mode === true;
+  // Tek kullanici modunda "aydinlatma metnini okuyun" uyarisi anlamsizdir:
+  // bilgilendirilecek bir calisan yoktur.
+  const pendingNotices = soloMode ? 0 : (me?.pendingNotices.length ?? 0);
 
   return (
     <div className="app">
@@ -158,7 +164,12 @@ export function App(): JSX.Element {
       )}
 
       {tab === 'asset' && assetId && (
-        <AssetScreen assetId={assetId} purposes={purposes} onBack={() => setTab('fleet')} />
+        <AssetScreen
+          assetId={assetId}
+          purposes={purposes}
+          soloMode={soloMode}
+          onBack={() => setTab('fleet')}
+        />
       )}
 
       {tab === 'billing' && <Billing canApprove={canApprove} />}
@@ -187,7 +198,7 @@ export function App(): JSX.Element {
         </button>
         <button className={tab === 'kvkk' ? 'active' : ''} onClick={() => setTab('kvkk')}>
           <span className="icon">🔒</span>
-          KVKK
+          {soloMode ? 'Kayit' : 'KVKK'}
           {pendingNotices > 0 ? ' •' : ''}
         </button>
       </nav>

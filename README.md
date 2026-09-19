@@ -34,10 +34,29 @@ bildirilir. Ayrıntı: [`docs/kvkk/00-uyum-plani.md`](docs/kvkk/00-uyum-plani.md
 | **Rölanti** | İş makinesinde **motor devrinden** (hız sıfır olduğu için), yol aracında hızdan |
 | **Geofence** | Şantiye/depo/yasaklı bölge; histerezis ile sınır titremesi önleme; şantiyede geçen süre |
 | **Yakıt** | Dolum ve ani düşüş (hırsızlık) tespiti, medyan filtre + güven skoru; saatlik tüketim |
-| **Kamera** | SD karta kayıt + 4G üzerinden canlı izleme; olay anında otomatik klip; SD'den geri oynatma |
+| **Kamera** | 4G cihazlarda canlı izleme ve SD'den geri oynatma; **bağımsız kayıt cihazlarında** olayın SD karttaki zaman aralığını (cihaz saat sapması uygulanmış) gösterme |
+| **Cihazsız çalışma** | Takip cihazı yokken elle vardiya başlat/bitir; sensör yokken yakıtı motor saatinden tahmin etme ve fiş girişiyle kalibre etme |
 | **Operatör** | Vardiya ataması — "makineyi kim kullanıyor" |
 | **Hakediş** | Saatlik / günlük götürü / asgari saat garantili / aylık tarifeler; mesai çarpanı, rölanti tarifesi, nakliye, yakıt, KDV; satır bazlı döküm; onay ve kilit; CSV dışa aktarım |
 | **KVKK** | Aydınlatma, teyit, amaçla sınırlılık, mahremiyet pencereleri, denetim kaydı, saklama/imha, ilgili kişi başvuruları, uyum panosu |
+
+## Tek makine / tek kişi kullanıyorsanız
+
+Makineyi kendiniz kullanıyor ve videoyu bağımsız bir kayıt cihazından (SD kart)
+alıyorsanız, kurulum tek komuttur:
+
+```bash
+OWNER_EMAIL=ben@firmam.com.tr OWNER_PASSWORD='GucluParola123' \
+ASSET_CODE=EKS-01 TRACKER_IMEI=<takip-cihazi-imei> \
+RECORDER_MODEL='SD kayit cihazi' npm run setup:solo
+```
+
+Bu kurulum **tek kullanıcı modunu** açar: izleyen ile izlenen aynı kişi
+olduğunda çalışan koruma kuralları uygulanmaz. Makineye başka bir operatör
+atandığı anda korumalar o kişi için kendiliğinden geri gelir.
+
+Hangi verinin nereden geldiği, hangi cihazın ne verdiği ve sensörsüz yakıt
+takibi: [`docs/tek-makine-kurulum.md`](docs/tek-makine-kurulum.md)
 
 ## Hızlı başlangıç
 
@@ -164,7 +183,7 @@ Seçim rehberi, montaj ve kamera açıları: [`docs/donanim.md`](docs/donanim.md
 ## Testler
 
 ```bash
-npm test          # 133 test (birim + API entegrasyon)
+npm test          # 150 test (birim + API entegrasyon)
 npm run typecheck # tüm workspace
 ```
 
@@ -180,6 +199,7 @@ npm run typecheck # tüm workspace
 | Belge | İçerik |
 |-------|--------|
 | [`docs/mimari.md`](docs/mimari.md) | Katmanlar, veri modeli, işleme hattı, ölçekleme |
+| [`docs/tek-makine-kurulum.md`](docs/tek-makine-kurulum.md) | **Tek makine:** veri hangi cihazdan gelir, sensörsüz yakıt, kayıt cihazı akışı |
 | [`docs/donanim.md`](docs/donanim.md) | Cihaz seçimi, montaj, kamera açıları, SIM ve veri planı |
 | [`docs/kurulum.md`](docs/kurulum.md) | Kurulum, ortam değişkenleri, üretime alma, yedekleme |
 | [`docs/api.md`](docs/api.md) | REST uç noktaları |

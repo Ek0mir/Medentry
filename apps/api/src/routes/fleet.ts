@@ -9,7 +9,7 @@ import { ASSET_TYPE_LABELS } from '@medentry/shared';
 import type { AssetType, Geofence } from '@medentry/shared';
 import { HttpError, currentUser, requireAuth, requireRole, requestMeta } from '../auth/context.js';
 import { query, queryOne } from '../db/pool.js';
-import { guardAccess } from '../kvkk/guard.js';
+import { clearCompanySettingsCache, guardAccess } from '../kvkk/guard.js';
 import { clearPipelineCaches } from '../pipeline/ingest.js';
 import {
   bool,
@@ -93,7 +93,9 @@ export async function fleetRoutes(app: FastifyInstance): Promise<void> {
          idle_strategy = COALESCE($6, idle_strategy),
          project_id = COALESCE($7, project_id),
          rate_card_id = COALESCE($8, rate_card_id),
-         is_active = COALESCE($9, is_active)
+         is_active = COALESCE($9, is_active),
+         nominal_consumption_lph = COALESCE($10, nominal_consumption_lph),
+         hour_meter_offset_sec = COALESCE($11, hour_meter_offset_sec)
        WHERE id = $1 AND company_id = $2
        RETURNING id`,
       [
@@ -108,6 +110,11 @@ export async function fleetRoutes(app: FastifyInstance): Promise<void> {
         body['projectId'] ? uuid(body['projectId'], 'projectId') : null,
         body['rateCardId'] ? uuid(body['rateCardId'], 'rateCardId') : null,
         body['isActive'] === undefined ? null : bool(body, 'isActive', true),
+        optionalNum(body, 'nominalConsumptionLph') ?? null,
+        // Makinenin cihaz takilmadan onceki saat gostergesi (saat -> saniye)
+        body['hourMeterHours'] === undefined
+          ? null
+          : Math.round(num(body, 'hourMeterHours', { min: 0, max: 200_000 }) * 3600),
       ],
     );
     if (rows.length === 0) throw new HttpError(404, 'Varlik bulunamadi');
@@ -219,6 +226,101 @@ export async function fleetRoutes(app: FastifyInstance): Promise<void> {
     );
   });
 
+  /**
+   * Elle puantaj baslatma.
+   *
+   * Kontak kablosu bagli olmayan veya henuz takip cihazi takilmamis makineler
+   * icin. Telemetri varsa oturum zaten otomatik acilir; ayni anda iki acik
+   * oturum olamayacagi icin bu uc 409 doner.
+   */
+  app.post('/api/assets/:id/sessions/start', { preHandler: requireAuth }, async (request) => {
+    const user = currentUser(request);
+    const assetId = uuid((request.params as Record<string, unknown>)['id'], 'id');
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const startedAt = date(body['startedAt'] ?? new Date(), 'startedAt');
+
+    const asset = await queryOne<{ id: string; project_id: string | null }>(
+      `SELECT id, project_id FROM assets WHERE id = $1 AND company_id = $2`,
+      [assetId, user.companyId],
+    );
+    if (!asset) throw new HttpError(404, 'Varlik bulunamadi');
+
+    const operator = await queryOne<{ operator_id: string }>(
+      `SELECT operator_id FROM operator_assignments
+        WHERE asset_id = $1 AND starts_at <= $2 AND (ends_at IS NULL OR ends_at > $2)
+        ORDER BY starts_at DESC LIMIT 1`,
+      [assetId, startedAt],
+    );
+
+    const row = await queryOne<{ id: string }>(
+      `INSERT INTO work_sessions
+         (company_id, asset_id, operator_id, project_id, started_at, source, is_open, note, created_by)
+       VALUES ($1,$2,$3,$4,$5,'manual',true,$6,$7)
+       ON CONFLICT (asset_id) WHERE is_open DO NOTHING
+       RETURNING id`,
+      [
+        user.companyId,
+        assetId,
+        operator?.operator_id ?? user.id,
+        asset.project_id,
+        startedAt,
+        optionalStr(body, 'note') ?? null,
+        user.id,
+      ],
+    );
+
+    if (!row) {
+      throw new HttpError(
+        409,
+        'Bu makinede zaten acik bir calisma oturumu var. Once mevcut oturumu kapatin.',
+        'SESSION_ALREADY_OPEN',
+      );
+    }
+    return { id: row.id, startedAt };
+  });
+
+  /** Elle puantaj bitirme. */
+  app.post('/api/assets/:id/sessions/stop', { preHandler: requireAuth }, async (request) => {
+    const user = currentUser(request);
+    const assetId = uuid((request.params as Record<string, unknown>)['id'], 'id');
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const endedAt = date(body['endedAt'] ?? new Date(), 'endedAt');
+
+    const session = await queryOne<{ id: string; started_at: Date; source: string }>(
+      `SELECT id, started_at, source FROM work_sessions
+        WHERE asset_id = $1 AND company_id = $2 AND is_open`,
+      [assetId, user.companyId],
+    );
+    if (!session) throw new HttpError(404, 'Acik calisma oturumu bulunamadi', 'NO_OPEN_SESSION');
+
+    const startedAt = new Date(session.started_at);
+    if (endedAt.getTime() <= startedAt.getTime()) {
+      throw new HttpError(400, 'Bitis zamani baslangictan sonra olmalidir', 'INVALID_RANGE');
+    }
+    const durationSec = Math.round((endedAt.getTime() - startedAt.getTime()) / 1000);
+
+    // Elle acilan oturumda rolanti bilgisi yoktur; tum sure calisma sayilir.
+    // Isteyen `idleMinutes` ile rolantiyi beyan edebilir.
+    const idleSec = Math.min(durationSec, Math.round((optionalNum(body, 'idleMinutes') ?? 0) * 60));
+
+    await query(
+      `UPDATE work_sessions
+          SET ended_at = $2, duration_sec = $3, idle_sec = $4, working_sec = $5,
+              is_open = false, note = COALESCE($6, note), updated_at = now()
+        WHERE id = $1`,
+      [session.id, endedAt, durationSec, idleSec, durationSec - idleSec, optionalStr(body, 'note') ?? null],
+    );
+    await query(`UPDATE asset_state SET open_session_id = NULL WHERE asset_id = $1`, [assetId]);
+
+    return {
+      id: session.id,
+      startedAt,
+      endedAt,
+      durationSec,
+      hours: Math.round((durationSec / 3600) * 100) / 100,
+    };
+  });
+
   /** Olaylar / alarmlar. */
   app.get('/api/assets/:id/events', { preHandler: requireAuth }, async (request) => {
     const user = currentUser(request);
@@ -293,7 +395,52 @@ export async function fleetRoutes(app: FastifyInstance): Promise<void> {
       ),
     ]);
 
-    return { events, transactions };
+    // Sensor olmayan makinede gercek tuketim, fis girisleri ile motor
+    // saatinin oranindan bulunur. Bu oran ayni zamanda tahmin icin kullanilan
+    // nominal degeri (assets.nominal_consumption_lph) kalibre eder.
+    const totals = await queryOne<{
+      liters: number | null;
+      cost: number | null;
+      engine_sec: number | null;
+      nominal: number | null;
+    }>(
+      `SELECT
+         (SELECT SUM(liters) FROM fuel_transactions
+           WHERE asset_id = $1 AND company_id = $2 AND ts >= $3) AS liters,
+         (SELECT SUM(total) FROM fuel_transactions
+           WHERE asset_id = $1 AND company_id = $2 AND ts >= $3) AS cost,
+         (SELECT SUM(duration_sec) FROM work_sessions
+           WHERE asset_id = $1 AND company_id = $2 AND started_at >= $3 AND NOT is_open) AS engine_sec,
+         (SELECT nominal_consumption_lph FROM assets WHERE id = $1) AS nominal`,
+      [id, user.companyId, from],
+    );
+
+    const purchasedLiters = Number(totals?.liters ?? 0);
+    const cost = Number(totals?.cost ?? 0);
+    const engineHours = Number(totals?.engine_sec ?? 0) / 3600;
+    const measuredLph = engineHours > 0 && purchasedLiters > 0 ? purchasedLiters / engineHours : null;
+
+    return {
+      events,
+      transactions,
+      summary: {
+        from,
+        purchasedLiters: round2(purchasedLiters),
+        cost: round2(cost),
+        engineHours: round2(engineHours),
+        /** Fis girisleri / motor saati - gercek tuketim. */
+        measuredLitersPerHour: measuredLph === null ? null : round2(measuredLph),
+        /** Tahminde kullanilan beyan edilen deger. */
+        nominalLitersPerHour: totals?.nominal ?? null,
+        costPerHour: engineHours > 0 && cost > 0 ? round2(cost / engineHours) : null,
+        note:
+          measuredLph === null
+            ? 'Yakit alim fisi girilmedigi icin gercek tuketim hesaplanamadi.'
+            : totals?.nominal
+              ? `Beyan edilen ${totals.nominal} lt/saat, olculen ${round2(measuredLph)} lt/saat.`
+              : `Olculen tuketim ${round2(measuredLph)} lt/saat. Bu degeri makinenin nominal tuketimi olarak kaydedebilirsiniz.`,
+      },
+    };
   });
 
   app.post('/api/assets/:id/fuel-transactions', { preHandler: requireRole('owner', 'manager', 'site_chief') }, async (request) => {
@@ -321,6 +468,60 @@ export async function fleetRoutes(app: FastifyInstance): Promise<void> {
       ],
     );
     return { id: row?.id };
+  });
+
+  // -------------------------------------------------------------------------
+  // Sirket ayarlari
+  // -------------------------------------------------------------------------
+
+  app.get('/api/settings', { preHandler: requireAuth }, async (request) => {
+    const user = currentUser(request);
+    const row = await queryOne(
+      `SELECT name, timezone, currency, solo_mode, kvkk_contact_name, kvkk_contact_email
+         FROM companies WHERE id = $1`,
+      [user.companyId],
+    );
+    if (!row) throw new HttpError(404, 'Sirket bulunamadi');
+    return row;
+  });
+
+  /**
+   * Tek kullanici modu.
+   *
+   * Isletme sahibi makineyi kendisi kullaniyorsa, calisani isverene karsi
+   * koruyan kisitlar (aydinlatma teyidi, gerekce, mola karartmasi, kabin
+   * sinirlari) uygulanmaz. Makineye baska bir operator atandigi anda bu
+   * korumalar o kisi icin kendiliginden geri gelir.
+   */
+  app.patch('/api/settings', { preHandler: requireRole('owner') }, async (request) => {
+    const user = currentUser(request);
+    const body = request.body as Record<string, unknown>;
+
+    const rows = await query<{ solo_mode: boolean }>(
+      `UPDATE companies SET
+         solo_mode = COALESCE($2, solo_mode),
+         name = COALESCE($3, name),
+         timezone = COALESCE($4, timezone),
+         currency = COALESCE($5, currency)
+       WHERE id = $1
+       RETURNING solo_mode`,
+      [
+        user.companyId,
+        body['soloMode'] === undefined ? null : bool(body, 'soloMode', false),
+        optionalStr(body, 'name') ?? null,
+        optionalStr(body, 'timezone') ?? null,
+        optionalStr(body, 'currency') ?? null,
+      ],
+    );
+    clearCompanySettingsCache();
+
+    return {
+      soloMode: rows[0]?.solo_mode ?? false,
+      note:
+        rows[0]?.solo_mode === true
+          ? 'Tek kullanici modu acik. Makineye baska bir operator atadiginizda calisan koruma kurallari o kisi icin otomatik devreye girer.'
+          : 'Tek kullanici modu kapali. Calisan koruma kurallari uygulaniyor.',
+    };
   });
 
   // -------------------------------------------------------------------------
@@ -368,6 +569,70 @@ export async function fleetRoutes(app: FastifyInstance): Promise<void> {
     return { id: row?.id };
   });
 
+  /** Cihaz guncelleme: kayit cihazi saat sapmasi, model, saat dilimi. */
+  app.patch('/api/devices/:id', { preHandler: requireRole('owner', 'manager') }, async (request) => {
+    const user = currentUser(request);
+    const id = uuid((request.params as Record<string, unknown>)['id'], 'id');
+    const body = request.body as Record<string, unknown>;
+
+    const rows = await query<{ id: string }>(
+      `UPDATE devices SET
+         model = COALESCE($3, model),
+         sim_msisdn = COALESCE($4, sim_msisdn),
+         utc_offset_minutes = COALESCE($5, utc_offset_minutes),
+         clock_offset_sec = COALESCE($6, clock_offset_sec),
+         asset_id = COALESCE($7, asset_id),
+         is_active = COALESCE($8, is_active)
+       WHERE id = $1 AND company_id = $2
+       RETURNING id`,
+      [
+        id,
+        user.companyId,
+        optionalStr(body, 'model') ?? null,
+        optionalStr(body, 'simMsisdn') ?? null,
+        optionalNum(body, 'utcOffsetMinutes') ?? null,
+        // Kayit cihazi saatinin gercek saatten sapmasi: + ileri, - geri
+        body['clockOffsetSec'] === undefined
+          ? null
+          : num(body, 'clockOffsetSec', { min: -86_400, max: 86_400 }),
+        body['assetId'] ? uuid(body['assetId'], 'assetId') : null,
+        body['isActive'] === undefined ? null : bool(body, 'isActive', true),
+      ],
+    );
+    if (rows.length === 0) throw new HttpError(404, 'Cihaz bulunamadi');
+    clearPipelineCaches();
+    return { ok: true };
+  });
+
+  /** Kamera guncelleme: etiket ve kaydin nasil alinacagi. */
+  app.patch('/api/cameras/:id', { preHandler: requireRole('owner', 'manager') }, async (request) => {
+    const user = currentUser(request);
+    const id = uuid((request.params as Record<string, unknown>)['id'], 'id');
+    const body = request.body as Record<string, unknown>;
+
+    const rows = await query<{ id: string; retrieval: string }>(
+      `UPDATE device_cameras SET
+         label = COALESCE($3, label),
+         retrieval = COALESCE($4, retrieval),
+         sd_recording = COALESCE($5, sd_recording),
+         is_active = COALESCE($6, is_active)
+       WHERE id = $1 AND company_id = $2
+       RETURNING id, retrieval`,
+      [
+        id,
+        user.companyId,
+        optionalStr(body, 'label') ?? null,
+        body['retrieval']
+          ? oneOf(body['retrieval'], ['integrated', 'manual'] as const, 'retrieval')
+          : null,
+        body['sdRecording'] === undefined ? null : bool(body, 'sdRecording', true),
+        body['isActive'] === undefined ? null : bool(body, 'isActive', true),
+      ],
+    );
+    if (rows.length === 0) throw new HttpError(404, 'Kamera bulunamadi');
+    return { ok: true, retrieval: rows[0]!.retrieval };
+  });
+
   /**
    * Kamera tanimi.
    * Kabin kamerasi otomatik olarak "yuksek mahremiyet" ve "olay bazli" olarak
@@ -396,12 +661,12 @@ export async function fleetRoutes(app: FastifyInstance): Promise<void> {
     const row = await queryOne<{ id: string }>(
       `INSERT INTO device_cameras
          (company_id, device_id, channel_no, position, label, records_audio, privacy_class,
-          event_only, sd_recording)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+          event_only, sd_recording, retrieval)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        ON CONFLICT (device_id, channel_no) DO UPDATE
           SET position = EXCLUDED.position, label = EXCLUDED.label,
               records_audio = EXCLUDED.records_audio, privacy_class = EXCLUDED.privacy_class,
-              event_only = EXCLUDED.event_only, is_active = true
+              event_only = EXCLUDED.event_only, retrieval = EXCLUDED.retrieval, is_active = true
        RETURNING id`,
       [
         user.companyId,
@@ -414,6 +679,9 @@ export async function fleetRoutes(app: FastifyInstance): Promise<void> {
         // Kabin kamerasi surekli degil, yalnizca olay aninda kayit alir.
         position === 'cabin' ? true : bool(body, 'eventOnly', false),
         bool(body, 'sdRecording', true),
+        body['retrieval']
+          ? oneOf(body['retrieval'], ['integrated', 'manual'] as const, 'retrieval')
+          : 'integrated',
       ],
     );
     return { id: row?.id, privacyClass: position === 'cabin' ? 'high' : 'standard' };
@@ -653,3 +921,6 @@ export async function fleetRoutes(app: FastifyInstance): Promise<void> {
   });
 }
 
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
+}

@@ -32,16 +32,20 @@ interface CameraRow {
   privacy_class: string;
   records_audio: boolean;
   event_only: boolean;
+  retrieval: string;
   device_ident: string;
+  device_model: string | null;
   protocol: string;
   utc_offset_minutes: number;
+  clock_offset_sec: number;
 }
 
 async function loadCamera(companyId: string, cameraId: string): Promise<CameraRow> {
   const row = await queryOne<CameraRow>(
     `SELECT c.id, c.company_id, d.asset_id, a.name AS asset_name, c.channel_no, c.position,
-            c.privacy_class, c.records_audio, c.event_only,
-            d.ident AS device_ident, d.protocol, d.utc_offset_minutes
+            c.privacy_class, c.records_audio, c.event_only, c.retrieval,
+            d.ident AS device_ident, d.model AS device_model, d.protocol,
+            d.utc_offset_minutes, d.clock_offset_sec
        FROM device_cameras c
        JOIN devices d ON d.id = c.device_id
        JOIN assets a ON a.id = d.asset_id
@@ -50,6 +54,22 @@ async function loadCamera(companyId: string, cameraId: string): Promise<CameraRo
   );
   if (!row) throw new HttpError(404, 'Kamera bulunamadi');
   return row;
+}
+
+/**
+ * Bagimsiz kayit cihazi (SD kart) platform uzerinden akis veremez.
+ * Kullaniciya bos bir oynatici yerine, kaydi cihazda nerede bulacagini soyleriz.
+ */
+function assertIntegrated(camera: CameraRow): void {
+  if (camera.retrieval === 'manual') {
+    throw new HttpError(
+      409,
+      `Bu kamera bagimsiz bir kayit cihazina bagli (${camera.device_model ?? 'kayit cihazi'}). ` +
+        'Goruntu platform uzerinden akmaz; SD karttan elle alinir. ' +
+        'Olay listesindeki "SD kayit araligi" bilgisini kullanin.',
+      'MANUAL_RETRIEVAL',
+    );
+  }
 }
 
 function target(camera: CameraRow): CameraTarget {
@@ -76,9 +96,11 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
       records_audio: boolean;
       event_only: boolean;
       sd_recording: boolean;
+      retrieval: string;
+      device_model: string | null;
     }>(
       `SELECT c.id, c.channel_no, c.position, c.label, c.privacy_class, c.records_audio,
-              c.event_only, c.sd_recording
+              c.event_only, c.sd_recording, c.retrieval, d.model AS device_model
          FROM device_cameras c
          JOIN devices d ON d.id = c.device_id
         WHERE d.asset_id = $1 AND c.company_id = $2 AND c.is_active
@@ -96,8 +118,10 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
       recordsAudio: row.records_audio,
       eventOnly: row.event_only,
       sdRecording: row.sd_recording,
-      // Kabin kamerasi hicbir kosulda canli izlenemez.
-      liveCapable: row.position !== 'cabin',
+      retrieval: row.retrieval,
+      deviceModel: row.device_model,
+      // Bagimsiz kayit cihazindan ve kabinden canli yayin alinmaz.
+      liveCapable: row.retrieval !== 'manual' && row.position !== 'cabin',
     }));
   });
 
@@ -108,9 +132,12 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     const body = request.body as Record<string, unknown>;
     const cameraId = uuid(body['cameraId'], 'cameraId');
     const purpose = str(body, 'purpose');
-    const reason = str(body, 'reason', { min: 15, max: 500 });
+    // Gerekce zorunlulugunu politika katmani belirler (tek kullanici modunda
+    // kisi kendi goruntusune bakarken gerekce istenmez).
+    const reason = optionalStr(body, 'reason') ?? '';
 
     const camera = await loadCamera(user.companyId, cameraId);
+    assertIntegrated(camera);
     const guard = await guardAccess({
       user,
       purpose,
@@ -138,7 +165,16 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
          (company_id, asset_id, camera_id, user_id, mode, purpose, reason, ip, user_agent)
        VALUES ($1,$2,$3,$4,'live',$5,$6,$7,$8)
        RETURNING id`,
-      [user.companyId, camera.asset_id, cameraId, user.id, purpose, reason, meta.ip, meta.userAgent],
+      [
+        user.companyId,
+        camera.asset_id,
+        cameraId,
+        user.id,
+        purpose,
+        reason || 'Tek kullanici modu - gerekce istenmedi',
+        meta.ip,
+        meta.userAgent,
+      ],
     );
     if (!session) throw new HttpError(500, 'Izleme oturumu olusturulamadi');
 
@@ -214,10 +250,11 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     const body = request.body as Record<string, unknown>;
     const cameraId = uuid(body['cameraId'], 'cameraId');
     const purpose = str(body, 'purpose');
-    const reason = str(body, 'reason', { min: 15, max: 500 });
+    const reason = optionalStr(body, 'reason') ?? '';
     const eventId = optionalStr(body, 'eventId');
 
     const camera = await loadCamera(user.companyId, cameraId);
+    assertIntegrated(camera);
 
     let from = date(body['from'], 'from');
     let to = date(body['to'], 'to');
@@ -274,7 +311,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
         cameraId,
         user.id,
         purpose,
-        reason,
+        reason || 'Tek kullanici modu - gerekce istenmedi',
         eventId ? Number(eventId) : null,
         from,
         to,
@@ -337,6 +374,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     const purpose = typeof q['purpose'] === 'string' ? q['purpose'] : 'is_guvenligi';
 
     const camera = await loadCamera(user.companyId, cameraId);
+    assertIntegrated(camera);
     await guardAccess({
       user,
       purpose,
@@ -371,10 +409,11 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     const body = request.body as Record<string, unknown>;
     const cameraId = uuid(body['cameraId'], 'cameraId');
     const purpose = str(body, 'purpose');
-    const reason = str(body, 'reason', { min: 15, max: 500 });
+    const reason = optionalStr(body, 'reason') ?? '';
     const eventId = optionalStr(body, 'eventId');
 
     const camera = await loadCamera(user.companyId, cameraId);
+    assertIntegrated(camera);
 
     let from = date(body['from'], 'from');
     let to = date(body['to'], 'to');
@@ -416,7 +455,7 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
         from,
         to,
         purpose,
-        reason,
+        reason || 'Tek kullanici modu - gerekce istenmedi',
       ],
     );
 
@@ -431,6 +470,112 @@ export async function mediaRoutes(app: FastifyInstance): Promise<void> {
     ]);
 
     return { id: requestRow?.id, status: 'sent', from, to };
+  });
+
+  /**
+   * Bagimsiz kayit cihazi icin "bu olayi SD kartta nerede bulurum" yaniti.
+   *
+   * Kayit cihazlarinin saati gercek saatten kayar; bu sapma (clock_offset_sec)
+   * uygulanarak cihazda aranacak zaman araligi verilir.
+   */
+  app.get('/api/events/:id/clip-window', { preHandler: requireAuth }, async (request) => {
+    const user = currentUser(request);
+    const meta = requestMeta(request);
+    const q = request.query as Record<string, unknown>;
+    const eventId = Number((request.params as Record<string, unknown>)['id']);
+    if (!Number.isInteger(eventId)) throw new HttpError(400, 'Gecersiz olay kimligi');
+
+    const event = await queryOne<{
+      id: number;
+      ts: Date;
+      event_type: string;
+      severity: string;
+      asset_id: string;
+      asset_name: string;
+      timezone: string;
+    }>(
+      `SELECT e.id, e.ts, e.event_type, e.severity, e.asset_id, a.name AS asset_name, c.timezone
+         FROM device_events e
+         JOIN assets a ON a.id = e.asset_id
+         JOIN companies c ON c.id = e.company_id
+        WHERE e.id = $1 AND e.company_id = $2`,
+      [eventId, user.companyId],
+    );
+    if (!event) throw new HttpError(404, 'Olay kaydi bulunamadi');
+
+    // Olay penceresini serbestce genisletebilmek icin (or. 2 dakika once).
+    const beforeSec = Math.min(600, Math.max(EVENT_CLIP_BEFORE_SEC, Number(q['beforeSec'] ?? 0) || 0));
+    const afterSec = Math.min(600, Math.max(EVENT_CLIP_AFTER_SEC, Number(q['afterSec'] ?? 0) || 0));
+
+    await guardAccess({
+      user,
+      purpose: typeof q['purpose'] === 'string' ? q['purpose'] : 'kaza_inceleme',
+      dataType: 'camera_playback',
+      action: 'clip_window_lookup',
+      assetId: event.asset_id,
+      reason: `Olay ${eventId} icin kayit cihazinda aranacak zaman araligi soruldu`,
+      linkedEventId: eventId,
+      ts: new Date(event.ts),
+      ip: meta.ip,
+      userAgent: meta.userAgent,
+    });
+
+    const eventAt = new Date(event.ts);
+    const from = new Date(eventAt.getTime() - beforeSec * 1000);
+    const to = new Date(eventAt.getTime() + afterSec * 1000);
+
+    const recorders = await query<{
+      camera_id: string;
+      label: string | null;
+      position: string;
+      retrieval: string;
+      device_model: string | null;
+      clock_offset_sec: number;
+    }>(
+      `SELECT c.id AS camera_id, c.label, c.position, c.retrieval,
+              d.model AS device_model, d.clock_offset_sec
+         FROM device_cameras c
+         JOIN devices d ON d.id = c.device_id
+        WHERE d.asset_id = $1 AND c.company_id = $2 AND c.is_active AND c.sd_recording
+        ORDER BY c.channel_no`,
+      [event.asset_id, user.companyId],
+    );
+
+    const local = (date: Date, offsetSec: number): string =>
+      new Date(date.getTime() + offsetSec * 1000).toLocaleString('tr-TR', {
+        timeZone: event.timezone,
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+
+    return {
+      eventId: event.id,
+      eventType: event.event_type,
+      severity: event.severity,
+      assetName: event.asset_name,
+      eventAt,
+      timezone: event.timezone,
+      windowFrom: from,
+      windowTo: to,
+      recorders: recorders.map((r) => ({
+        cameraId: r.camera_id,
+        label: r.label ?? r.position,
+        retrieval: r.retrieval,
+        deviceModel: r.device_model,
+        clockOffsetSec: r.clock_offset_sec,
+        /** Kayit cihazinin kendi saatine gore aranacak aralik. */
+        searchFrom: local(from, r.clock_offset_sec),
+        searchTo: local(to, r.clock_offset_sec),
+        note:
+          r.clock_offset_sec === 0
+            ? 'Cihaz saati gercek saatle ayni kabul edildi.'
+            : `Cihaz saati ${Math.abs(r.clock_offset_sec)} sn ${r.clock_offset_sec > 0 ? 'ileri' : 'geri'}; aralik buna gore kaydirildi.`,
+      })),
+    };
   });
 
   /** Kayit cekme taleplerinin durumu. */

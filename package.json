@@ -21,7 +21,8 @@
     "dev:api": "npm run dev -w @medentry/api",
     "dev:ingest": "npm run dev -w @medentry/ingest",
     "dev:web": "npm run dev -w @medentry/web",
-    "simulate": "npm run start -w @medentry/simulator"
+    "simulate": "npm run start -w @medentry/simulator",
+    "setup:solo": "npm run setup:solo -w @medentry/api"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

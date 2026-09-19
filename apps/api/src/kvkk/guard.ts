@@ -57,10 +57,35 @@ function shouldSkipAudit(key: string, throttleMs?: number): boolean {
   return false;
 }
 
+const SETTINGS_TTL_MS = 60_000;
+const companySettings = new Map<string, { soloMode: boolean; expires: number }>();
+
+/** Sirket tek kullanici modunda mi? (60 sn onbellekli) */
+export async function isSoloCompany(companyId: string): Promise<boolean> {
+  const cached = companySettings.get(companyId);
+  if (cached && cached.expires > Date.now()) return cached.soloMode;
+
+  const row = await queryOne<{ solo_mode: boolean }>(
+    `SELECT solo_mode FROM companies WHERE id = $1`,
+    [companyId],
+  );
+  const soloMode = row?.solo_mode === true;
+  companySettings.set(companyId, { soloMode, expires: Date.now() + SETTINGS_TTL_MS });
+  return soloMode;
+}
+
+/** Ayar degistiginde onbellegi bosaltir. */
+export function clearCompanySettingsCache(): void {
+  companySettings.clear();
+}
+
 export interface GuardResult {
   decision: AccessDecision;
+  /** Bildirim gonderilecek ilgili kisi. Kullanicinin kendisiyse bos birakilir. */
   subjectUserId?: string;
   auditId?: number;
+  /** Karar tek kullanici modunda mi verildi? */
+  soloMode: boolean;
 }
 
 function assertPurpose(value: string): ProcessingPurpose {
@@ -171,10 +196,17 @@ export async function guardAccess(params: GuardParams): Promise<GuardResult> {
     if (!subjectUserId && operator) subjectUserId = operator.id;
   }
 
+  // Tek kullanici modu, yalnizca izlenen kisi istegi yapan kullanicinin
+  // kendisiyse (veya makineye hic operator atanmamissa) devreye girer.
+  // Makineye baska biri atandigi anda calisan korumalari kendiliginden doner.
+  const soloMode =
+    (await isSoloCompany(params.user.companyId)) &&
+    (subjectUserId === undefined || subjectUserId === params.user.id);
+
   // Aydinlatma teyidi yalnizca kamera erisiminde ve bir ilgili kisi
   // belirlenebiliyorsa aranir.
   let operatorAcknowledged: boolean | undefined;
-  if (isCamera && subjectUserId) {
+  if (isCamera && subjectUserId && !soloMode) {
     operatorAcknowledged = await hasAcknowledgedNotice(subjectUserId, 'camera');
   }
 
@@ -190,6 +222,7 @@ export async function guardAccess(params: GuardParams): Promise<GuardResult> {
     operatorAcknowledged,
     operatorOnShift,
     privacyWindows,
+    soloMode,
   });
 
   const throttleKey = `${params.user.id}|${params.action}|${params.assetId ?? '-'}`;
@@ -219,8 +252,9 @@ export async function guardAccess(params: GuardParams): Promise<GuardResult> {
     });
   }
 
-  const result: GuardResult = { decision };
-  if (subjectUserId) result.subjectUserId = subjectUserId;
+  const result: GuardResult = { decision, soloMode };
+  // Kisi kendi verisine bakiyorsa kendine bildirim gonderilmez.
+  if (subjectUserId && subjectUserId !== params.user.id) result.subjectUserId = subjectUserId;
   if (auditId !== undefined) result.auditId = auditId;
   return result;
 }

@@ -4,18 +4,21 @@ import { ApiError, api } from '../api.js';
 import type { CameraDto, LiveStreamDto, PurposeDto } from '../api.js';
 
 interface Props {
-  assetId: string;
   assetName: string;
   camera: CameraDto;
   purposes: PurposeDto[];
+  /** Tek kullanici modu: gerekce ve kabin kisitlari uygulanmaz. */
+  soloMode: boolean;
   onClose: () => void;
 }
 
 /** Kabin kamerasi icin canli izleme secenegi hic gosterilmez. */
 const CABIN_PURPOSES = new Set(['kaza_inceleme', 'is_guvenligi', 'hukuki_talep']);
 
-export function CameraDialog({ assetId, assetName, camera, purposes, onClose }: Props): JSX.Element {
-  const isCabin = camera.position === 'cabin';
+export function CameraDialog({ assetName, camera, purposes, soloMode, onClose }: Props): JSX.Element {
+  // Kabin kisitlari calisan mahremiyeti icindir; kisi kendi goruntusune
+  // bakiyorsa uygulanmaz.
+  const isCabin = camera.position === 'cabin' && !soloMode;
   const [purpose, setPurpose] = useState(isCabin ? 'kaza_inceleme' : 'is_guvenligi');
   const [reason, setReason] = useState('');
   const [eventId, setEventId] = useState('');
@@ -30,7 +33,7 @@ export function CameraDialog({ assetId, assetName, camera, purposes, onClose }: 
 
   async function start(): Promise<void> {
     setError(null);
-    if (reason.trim().length < 15) {
+    if (!soloMode && reason.trim().length < 15) {
       setError('Gerekce en az 15 karakter olmalidir. Bu metin denetim kaydina yazilir.');
       return;
     }
@@ -136,11 +139,18 @@ export function CameraDialog({ assetId, assetName, camera, purposes, onClose }: 
 
         {!stream && (
           <>
-            <div className="notice info">
-              Bu goruntuleme <strong>denetim kaydina</strong> yazilacak ve aracin operatorune
-              <strong> bildirim gonderilecektir</strong>. Goruntu yalnizca sectiginiz amac icin
-              kullanilabilir.
-            </div>
+            {soloMode ? (
+              <div className="notice info">
+                Bu goruntuleme <strong>denetim kaydina</strong> yazilir. Tek kullanici modunda
+                oldugunuz icin gerekce istenmez.
+              </div>
+            ) : (
+              <div className="notice info">
+                Bu goruntuleme <strong>denetim kaydina</strong> yazilacak ve aracin operatorune
+                <strong> bildirim gonderilecektir</strong>. Goruntu yalnizca sectiginiz amac icin
+                kullanilabilir.
+              </div>
+            )}
 
             <label className="field">
               <span className="lab">Isleme amaci</span>
@@ -168,15 +178,17 @@ export function CameraDialog({ assetId, assetName, camera, purposes, onClose }: 
               </label>
             )}
 
-            <label className="field">
-              <span className="lab">Gerekce (en az 15 karakter)</span>
-              <textarea
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="Neden bu goruntuye erismeniz gerekiyor?"
-              />
-              <span className="tiny muted">{reason.trim().length} karakter</span>
-            </label>
+            {!soloMode && (
+              <label className="field">
+                <span className="lab">Gerekce (en az 15 karakter)</span>
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Neden bu goruntuye erismeniz gerekiyor?"
+                />
+                <span className="tiny muted">{reason.trim().length} karakter</span>
+              </label>
+            )}
 
             {error && <div className="notice error">{error}</div>}
 

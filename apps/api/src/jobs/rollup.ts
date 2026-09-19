@@ -20,6 +20,7 @@ interface AssetRow {
   project_id: string | null;
   rate_card_id: string | null;
   fuel_tank_liters: number | null;
+  nominal_consumption_lph: number | null;
   timezone: string;
 }
 
@@ -73,7 +74,8 @@ function toRateCard(row: RateCardRow): RateCard {
 /** Tek bir varlik/gun icin hakedisi yeniden hesaplar. */
 export async function recomputeDailyBilling(assetId: string, dateKey: string): Promise<boolean> {
   const asset = await queryOne<AssetRow>(
-    `SELECT a.id, a.company_id, a.project_id, a.rate_card_id, a.fuel_tank_liters, c.timezone
+    `SELECT a.id, a.company_id, a.project_id, a.rate_card_id, a.fuel_tank_liters,
+            a.nominal_consumption_lph, c.timezone
        FROM assets a JOIN companies c ON c.id = a.company_id
       WHERE a.id = $1`,
     [assetId],
@@ -139,8 +141,19 @@ export async function recomputeDailyBilling(assetId: string, dateKey: string): P
         fuelIncluded: true,
       };
 
+  // Yakit verisi su siraya gore alinir:
+  //   1) seviye sensoru / CAN (oturumlardan gelen gercek tuketim)
+  //   2) tespit edilmis yakit dususleri
+  //   3) sensor yoksa: motor saati x beyan edilen ortalama tuketim
+  // Ucuncu yol tahmindir; gercek alimlarla kalibre edilmelidir.
   const fuelFromSessions = segments.reduce((sum, s) => sum + s.fuelLiters, 0);
-  const fuelUsed = fuelFromSessions > 0 ? fuelFromSessions : await fuelUsedFromEvents(assetId, start, end);
+  const engineHoursTotal = segments.reduce((sum, s) => sum + s.durationSec, 0) / 3600;
+  let fuelUsed = fuelFromSessions > 0 ? fuelFromSessions : await fuelUsedFromEvents(assetId, start, end);
+  let fuelEstimated = false;
+  if (fuelUsed === 0 && asset.nominal_consumption_lph && engineHoursTotal > 0) {
+    fuelUsed = Math.round(engineHoursTotal * asset.nominal_consumption_lph * 100) / 100;
+    fuelEstimated = true;
+  }
 
   const billing = computeDailyBilling({
     assetId,
@@ -207,7 +220,21 @@ export async function recomputeDailyBilling(assetId: string, dateKey: string): P
       billing.amountNet,
       billing.amountVat,
       billing.amountTotal,
-      JSON.stringify(billing.lines),
+      JSON.stringify(
+        fuelEstimated
+          ? [
+              ...billing.lines,
+              {
+                code: 'yakit_tahmini_notu',
+                label: 'Yakit, motor saatinden tahmin edildi (sensor yok)',
+                quantity: Math.round(engineHoursTotal * 100) / 100,
+                unit: 'saat',
+                unitPrice: asset.nominal_consumption_lph ?? 0,
+                amount: 0,
+              },
+            ]
+          : billing.lines,
+      ),
     ],
   );
 

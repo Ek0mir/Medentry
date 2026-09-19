@@ -88,8 +88,51 @@ export interface CameraDto {
   recordsAudio: boolean;
   eventOnly: boolean;
   sdRecording: boolean;
+  /** integrated: platform uzerinden | manual: SD karttan elle alinir. */
+  retrieval: 'integrated' | 'manual';
+  deviceModel: string | null;
   liveAllowed: boolean;
   liveBlockedReason: string | null;
+}
+
+export interface SettingsDto {
+  name: string;
+  timezone: string;
+  currency: string;
+  solo_mode: boolean;
+  kvkk_contact_email: string | null;
+}
+
+export interface ClipWindowDto {
+  eventId: number;
+  eventType: string;
+  severity: string;
+  assetName: string;
+  eventAt: string;
+  timezone: string;
+  windowFrom: string;
+  windowTo: string;
+  recorders: Array<{
+    cameraId: string;
+    label: string;
+    retrieval: string;
+    deviceModel: string | null;
+    clockOffsetSec: number;
+    searchFrom: string;
+    searchTo: string;
+    note: string;
+  }>;
+}
+
+export interface FuelSummaryDto {
+  from: string;
+  purchasedLiters: number;
+  cost: number;
+  engineHours: number;
+  measuredLitersPerHour: number | null;
+  nominalLitersPerHour: number | null;
+  costPerHour: number | null;
+  note: string;
 }
 
 export interface AssetDto {
@@ -127,7 +170,10 @@ export interface AssetDto {
     usedLitersToday: number;
     engineHoursTotal: number | null;
     odometerKm: number | null;
+    nominalLitersPerHour: number | null;
   };
+  /** Takip cihazi yoksa calisma saati elle girilir. */
+  hasTracker: boolean;
   cameras: CameraDto[];
   billing: { billableHours: number; amountTotal: number; currency: string; status: string } | null;
   alerts: Array<{ id: number; type: string; severity: string; ts: string }>;

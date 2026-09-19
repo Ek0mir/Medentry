@@ -26,6 +26,12 @@ suite('KVKK erisim politikasi (API)', () => {
     await resetTestDatabase();
     ctx = await startTestServer();
 
+    // Demo verisindeki vardiya disi penceresi (19:00-07:00) aksam saatlerinde
+    // calisan testleri kendine cekiyordu. Pencere davranisi kendi testinde
+    // acikca kuruldugu icin burada kapatiyoruz: testler saatten bagimsiz olmali.
+    const { pool } = await import('../src/db/pool.js');
+    await pool.query(`UPDATE privacy_windows SET is_active = false`);
+
     const dashboard = await ctx.app.inject({
       method: 'GET',
       url: '/api/dashboard',
@@ -128,7 +134,20 @@ suite('KVKK erisim politikasi (API)', () => {
       payload: { cameraId: frontCameraId, purpose: 'is_guvenligi', reason: 'kontrol' },
     });
 
-    expect(response.statusCode).toBe(400);
+    expect(response.statusCode).toBe(403);
+    expect((response.json() as { code: string }).code).toBe('REASON_REQUIRED');
+  });
+
+  it('gerekce hic verilmezse de reddedilir', async () => {
+    const response = await ctx.app.inject({
+      method: 'POST',
+      url: '/api/media/live',
+      headers: auth(ctx.tokens['manager']!),
+      payload: { cameraId: frontCameraId, purpose: 'is_guvenligi' },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect((response.json() as { code: string }).code).toBe('REASON_REQUIRED');
   });
 
   it('operator ve izleyici rolleri kamera acamaz', async () => {

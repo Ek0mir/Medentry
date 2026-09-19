@@ -56,6 +56,21 @@ export interface AccessRequest {
   operatorOnShift?: boolean;
   privacyWindows?: readonly PrivacyWindow[];
   timeZone?: string;
+  /**
+   * Tek kisilik isletme: izleyen kisi ile verisi izlenen kisi aynidir
+   * (isletme sahibi makineyi kendisi kullaniyor).
+   *
+   * Bu modda, calisani isverene karsi koruyan kisitlar anlamini yitirir ve
+   * uygulanmaz: aydinlatma teyidi, gerekce zorunlulugu, mola/vardiya disi
+   * karartmasi, kabin kamerasi sinirlari ve operatore bildirim.
+   * Sistemin tutarliligini saglayan kontroller (amacla sinirlilik, rol) ve
+   * denetim kaydi AYNEN surer.
+   *
+   * Cagiran taraf bu bayragi yalnizca ilgili kisi istegi yapan kullanicinin
+   * kendisi oldugunda (veya baska operator atanmamisken) gondermelidir;
+   * makineye baska bir operator atandigi anda korumalar kendiliginden geri gelir.
+   */
+  soloMode?: boolean;
 }
 
 export interface AccessDecision {
@@ -107,14 +122,16 @@ const OFF_SHIFT_ALLOWED_PURPOSES: ReadonlySet<ProcessingPurpose> = new Set<Proce
 const MIN_REASON_LENGTH = 15;
 
 /** Veri turunun amac matrisindeki karsiligi. */
-function matrixKey(dataType: DataType, cameraPosition?: CameraPosition): string {
+function matrixKey(dataType: DataType, cameraPosition?: CameraPosition, soloMode = false): string {
   switch (dataType) {
     case 'position':
     case 'position_history':
       return 'position';
     case 'camera_live':
     case 'camera_playback':
-      return cameraPosition === 'cabin' ? 'camera_cabin_event' : 'camera_outward';
+      // Kabin kamerasinin ayri kategoride olmasi calisan mahremiyeti icindir;
+      // kisi kendi goruntusune bakiyorsa bu ayrim anlamini yitirir.
+      return cameraPosition === 'cabin' && !soloMode ? 'camera_cabin_event' : 'camera_outward';
     case 'recording_download':
       return 'recording';
     case 'export':
@@ -136,7 +153,7 @@ export function evaluateAccess(req: AccessRequest): AccessDecision {
     req.dataType === 'recording_download';
 
   // 1) Amacla sinirlilik: bu amac bu veri turune erisebilir mi?
-  const key = matrixKey(req.dataType, req.cameraPosition);
+  const key = matrixKey(req.dataType, req.cameraPosition, req.soloMode === true);
   const allowedKeys = PURPOSE_DATA_MATRIX[req.purpose] ?? [];
   if (!allowedKeys.includes(key)) {
     return deny(
@@ -154,6 +171,18 @@ export function evaluateAccess(req: AccessRequest): AccessDecision {
   }
   if (req.role === 'operator' && isCamera) {
     return deny('ROLE_FORBIDDEN', 'Operator hesabi kamera goruntusu izleyemez.');
+  }
+
+  // 2b) Tek kisilik isletme: buradan sonraki kurallarin tamami calisani
+  // isverene karsi korumak icindir. Izleyen ile izlenen ayni kisi oldugunda
+  // uygulanmazlar. Denetim kaydi yine yazilir.
+  if (req.soloMode === true) {
+    return {
+      allowed: true,
+      code: 'ALLOWED_SOLO',
+      message: 'Erisim izni verildi (tek kullanici modu). Islem denetim kaydina yazildi.',
+      obligations: ['audit_log'],
+    };
   }
 
   // 3) Aydinlatma yukumlulugu: operator bilgilendirilmeden kamera acilmaz.
